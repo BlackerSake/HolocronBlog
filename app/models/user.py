@@ -3,7 +3,11 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import String, Boolean
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
+import enum
 
+class UserRole(str, enum.Enum):
+    ADMIN = "admin"
+    USER = "user"
 
 class User(Base):
     __tablename__ = "users"
@@ -14,6 +18,10 @@ class User(Base):
         unique=True,
         index=True,
         nullable=False, # 必需项,禁止为空
+    )
+    role: Mapped[str] = mapped_column(
+        String(20),
+        default=UserRole.USER.value,
     )
     email: Mapped[str] = mapped_column(
         String(100),

@@ -11,6 +11,7 @@ class UserCreate(BaseModel):
 class UserOut(BaseModel):
     id: int
     username: str
+    role: str
     email: str
     is_active: bool
     created_at: datetime

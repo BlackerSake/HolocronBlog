@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import asyncio
 import logging
 from app.core.database import AsyncSessionLocal
-from app.models.user import User
+from app.models.user import User, UserRole
 from passlib.context import CryptContext
 from sqlalchemy import select, delete
 
@@ -48,6 +48,7 @@ async def create_admin():
         hashed = pwd_content.hash(password)
         admin = User(
             username=username,
+            role=UserRole.ADMIN.value,
             email=email,
             password=hashed,
             is_active=True,

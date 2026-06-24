@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import logging
 import os
+from app.api.v1.endpoints import auth, users
 
 
 log_dir = "/Alpha/College_new/HolocronBlog/logs"
@@ -40,10 +41,13 @@ app = FastAPI(
     version = settings.APP_VERSION,
     lifespan=lifespan,
     )
-from app.api.v1.endpoints import auth
+
 app.include_router(auth.router,
                    prefix="/api/v1",
                    tags=["Authentication"])
+app.include_router(users.router, 
+                   prefix="/api/v1/users", 
+                   tags=["Users"])
 
 origins = [
     "http://localhost.com",

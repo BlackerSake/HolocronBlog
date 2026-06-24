@@ -3,10 +3,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from passlib.context import CryptContext
-
+from fastapi.security import OAuth2PasswordRequestForm
 from app.core.database import get_db
+from app.core.security import verify_password, create_access_token
 from app.models.user import User
 from app.schemas.user import UserCreate, UserOut
+from app.schemas.token import Token
+from datetime import timedelta
+from jose import JWTError, jwt
 
 import logging
 
@@ -23,7 +27,7 @@ def hash_password(password: str) -> str:
     # 防御性截断到 72 字节（UTF-8)
     password_bytes = password.encode("utf-8")[:72]
 
-    return pwd_context.hash(password)
+    return pwd_context.hash(password_bytes)
 
 @router.post("/register",
              response_model=UserOut, # 响应模型
@@ -53,4 +57,47 @@ async def register(user_data: UserCreate,
     await db.commit()
     await db.refresh(new_user) # 刷新对象, 获取自增id 和 时间
     return new_user
+    
+@router.post("/login", response_model=Token)
+async def login(
+    from_data: OAuth2PasswordRequestForm = Depends(),
+    db: AsyncSession = Depends(get_db),
+    ):
+    # 获取用户数据
+    username = from_data.username
+    password = from_data.password
+    
+    # 1. 查询用户是否存在
+    result = await db.execute(
+        select(User).where(User.username == username))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="用户名不正确"
+        )
+    # 2. 验证密码
+    if not verify_password(password, user.password):
+        raise HTTPException(
+            status_code=401,
+            detail="密码错误"
+        )
+    # 3. 检查状态, 账户是否激活
+    if not user.is_active:
+        raise HTTPException(
+            status_code=401,
+            detail="账号未激活"
+        )
+    # 4. 生成token
+    access_token = create_access_token(
+        data={"sub": user.username}
+    )
+    return Token(access_token=access_token, token_type="bearer")
+    # bearer : 持有即授权 
+    # 服务器不检查客户端身份（比如是不是同一个 IP、同一个设备），
+    # 只看 token 本身是否有效。所以谁“持有”（bear）这个 token，谁就能访问资源。
+
+
+
     

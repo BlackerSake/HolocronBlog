@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     # JWT 鉴权信息
     SECRET_KEY: str = "holocron_secret_key" # 密钥, 以后换到.env
     ALGORITHM: str = "HS256" # JWT 使用的加密算法
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30 # JWT 访问令牌过期时间
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30 # JWT 访问令牌过期时间 min
 
     class Config:
         env_file = ".env"
