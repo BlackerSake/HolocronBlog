@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     APP_VERSION: str = "0.0.1"
 
     # 数据库信息 先硬编码 SQLlite, 方便直接跑  后期再换PostgreSQL
-    DATABASE_URL: str = "sqlit+aiosqlite:///./holocorn.db"
+    DATABASE_URL: str = "sqlite+aiosqlite:///./holocorn.db"
     
     # JWT 鉴权信息
     SECRET_KEY: str = "holocron_secret_key" # 密钥, 以后换到.env

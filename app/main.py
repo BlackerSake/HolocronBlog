@@ -1,11 +1,49 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
+from app.core.database import Base, engine, get_db
+from contextlib import asynccontextmanager
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+import logging
+import os
+
+
+log_dir = "/Alpha/College_new/HolocronBlog/logs"
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler("logs/app.log"),
+        logging.StreamHandler() # 控制台输出
+    ])
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """FastAPI 生命周期, on_event 方法已经弃用"""
+    async with engine.begin() as conn: 
+        await conn.run_sync(Base.metadata.create_all)
+    """如果有redis的话,应该这样连接
+    await redis_client.connect()
+    """
+    yield # 应用运行期间
+
+    await engine.dispose() # 关闭数据库连接, 相当于@app.on_event("shutdown")
+    """如果有redis的话,应该这样关闭
+    await redis_client.close()
+    """
 app = FastAPI(
     title = settings.APP_NAME,
     description = settings.APP_DESCRIPTION,
     version = settings.APP_VERSION,
+    lifespan=lifespan,
     )
+from app.api.v1.endpoints import auth
+app.include_router(auth.router,
+                   prefix="/api/v1",
+                   tags=["Authentication"])
 
 origins = [
     "http://localhost.com",
@@ -24,13 +62,22 @@ app.add_middleware(
 
 )
 
-
 @app.get("/")
 async def root():
     return {"message":"This is my blog"}
 
+@app.get("/health/db")
+async def health_db(db: AsyncSession = Depends(get_db)): #Denpends 依赖注入
+    """检查数据库连接健康"""
+    # 执行一个查询: SELECT 1 用ORM 的select() 方法
+    result = await db.execute(select(1))
+    # bug-3 注入类型不对, 需要用text()包装,不能执行写裸的sql 
+    return {"status":"ok",
+            "result":result.scalar()}
 
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8848, reload=True)
+
+

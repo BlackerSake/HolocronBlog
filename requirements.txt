@@ -1,3 +1,5 @@
 uvicorn
 
 fastapi
+
+bcrypt==3.2.0

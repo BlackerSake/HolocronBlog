@@ -1,1 +1,45 @@
+# Python 编译文件
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+
+# 虚拟环境
+venv/
+env/
+.venv/
+ENV/
+
+# IDE 及编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 数据库文件（开发用的 SQLite）
+*.db
+*.sqlite
+*.sqlite3
+
+# 环境变量
 .env
+.env.local
+.env.*.local
+
+# Alembic 临时文件（迁移文件本身要提交，但缓存忽略）
+alembic/versions/__pycache__/
+
+# 日志文件（虽然你说不用管，但为了防止误提交，我还是加上，你如果确定不需要可以删掉）
+*.log
+logs/
+
+# 操作系统元数据
+.DS_Store
+Thumbs.db
+
+# 项目特定（可选）
+*.egg-info/
+dist/
+build/
