@@ -8,7 +8,7 @@ from sqlalchemy import select
 import logging
 import os
 from app.api.v1.endpoints import auth, users
-
+from app.routers import categories, tags
 
 log_dir = "/Alpha/College_new/HolocronBlog/logs"
 if not os.path.exists(log_dir):
@@ -48,7 +48,8 @@ app.include_router(auth.router,
 app.include_router(users.router, 
                    prefix="/api/v1/users", 
                    tags=["Users"])
-
+app.include_router(categories.router)
+app.include_router(tags.router)
 origins = [
     "http://localhost.com",
     "https://localhost.com",
