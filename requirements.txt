@@ -9,3 +9,4 @@ python-jose[cryptography]==3.5.0
 aiosqlite==0.22.1
 mistune==3.3.2
 python-multipart==0.0.32
+asyncpg==0.31.0

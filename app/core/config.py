@@ -6,20 +6,28 @@ class Settings(BaseSettings):
     APP_DESCRIPTION: str = "This is my blog (config)"
     APP_VERSION: str = "0.0.1"
 
-    # 数据库信息 先硬编码 SQLlite, 方便直接跑  后期再换PostgreSQL
-    DATABASE_URL: str = "sqlite+aiosqlite:///./holocorn.db"
-    
+    # 数据库信息，本地默认 SQLite
+    DATABASE_URL: str = "sqlite+aiosqlite:///./holocron.db"
+
+    # Railway 注入 postgresql:// → 自动转异步驱动
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        if self.DATABASE_URL.startswith("postgresql://"):
+            self.DATABASE_URL = self.DATABASE_URL.replace(
+                "postgresql://", "postgresql+asyncpg://", 1
+            )
+
     # JWT 鉴权信息
-    SECRET_KEY: str = "holocron_secret_key" # 密钥, 以后换到.env
-    ALGORITHM: str = "HS256" # JWT 使用的加密算法
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30 # JWT 访问令牌过期时间 min
+    SECRET_KEY: str = "holocron_secret_key"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
 
 
-# 实例化配置对象,即创建一个全局的设置对象
+# 实例化配置对象
 settings = Settings()
 
 
