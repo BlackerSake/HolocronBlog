@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from sqlalchemy import String, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 class Category(Base):
@@ -27,3 +27,5 @@ class Category(Base):
     created_at: Mapped[datetime] = mapped_column(
         server_default=func.now()
     )
+
+    articles = relationship("Article", back_populates="category")

@@ -1,0 +1,232 @@
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from sqlalchemy import select, func, or_
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+from datetime import datetime, timezone
+from app.core.database import get_db
+from app.core.dependencies import get_current_user
+from app.models.user import User, UserRole
+from app.models.article import Article
+from app.models.tag import Tag
+from app.schemas.article import ArticleCreate, ArticleUpdate, ArticleOut, ArticleListItem
+from app.schemas.common import Paginated
+from app.services.article_service import slugify, render_markdown
+
+router = APIRouter(prefix="/articles", tags=["Articles"])
+
+async def get_published_article_by_slug(db: AsyncSession, slug: str) -> Article | None:
+    """根据slug获取一篇已发布的未删除文章"""
+    result = await db.execute(
+        select(Article).where(Article.slug == slug,
+                              Article.is_deleted == False,
+                              Article.is_published == True)
+        .options(selectinload(Article.author),
+        selectinload(Article.category),
+        selectinload(Article.tags)),
+    )
+    return result.scalar_one_or_none()
+
+async def get_article_by_slug(db: AsyncSession, slug: str) -> Article | None:
+    """根据slug获取一篇未删除文章（不限发布状态）"""
+    result = await db.execute(
+        select(Article).where(Article.slug == slug,
+                              Article.is_deleted == False)
+        .options(selectinload(Article.author),
+        selectinload(Article.category),
+        selectinload(Article.tags)),
+    )
+    return result.scalar_one_or_none()
+
+@router.get("", response_model=Paginated[ArticleListItem])
+async def list_articles(
+    page: int = Query(1, ge=1), # 默认第一页,最小1
+    per_page: int = Query(10, ge=1, le=100), # 默认每页10条,1-100
+    category_id: int | None = None,
+    tag_id: int | None = None,
+    search: str | None = None, #关键词搜索
+    db: AsyncSession = Depends(get_db),
+):
+    """获取列表"""
+    query = select(Article).where(Article.is_deleted == False,
+                                  Article.is_published == True)
+    
+    # 筛选条件: 分类, 标签, 关键词
+    if category_id:
+        query = query.where(Article.category_id == category_id)
+    if tag_id:
+        query = query.where(Tag.id == tag_id)
+    if search:
+        query = query.where(or_( # 或条件,且有两个用法
+            # Article.title.contains(search), # 大小写敏感
+            Article.title.ilike(f"%{search}%"),
+            Article.content.ilike(f"%{search}%"), # 模糊匹配, 忽略大小写
+        ))
+    # 获取符合条件的文章数量
+    count_query = select(func.count()).select_from(query.subquery())
+    total = (await db.execute(count_query)).scalar()
+
+    #先排序, 再分页
+    query = query.order_by(Article.created_at.desc()).offset(
+        (page - 1) * per_page).limit(per_page)
+
+    query = query.options(selectinload(Article.author),
+                          selectinload(Article.category),
+                          selectinload(Article.tags))
+    
+    result = await db.execute(query) # 执行查询
+    articles = result.scalars().all() # 获取结果
+    
+    items = [ArticleListItem.model_validate(article) for article in articles]
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": (total + per_page - 1) // per_page,
+    }
+
+@router.get("/{slug}", response_model=ArticleOut)
+async def get_article(slug: str, db: AsyncSession = Depends(get_db)):
+    """获取一篇文章"""
+    article = await get_published_article_by_slug(db, slug)
+    if not article:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="文章不存在")
+    return ArticleOut.model_validate(article)
+
+
+@router.post("", response_model=ArticleOut)
+async def create_article(
+    article_in: ArticleCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    ## 新建文章,暂定返回状态为不发布
+    1. 生成slug
+    2. 渲染markdown
+    3. 创建 ORM对象
+    4. 处理标签关联"""
+
+    # 1. 生成slug
+    slug = slugify(article_in.title)
+    existing = await db.execute(
+        select(Article).where(Article.slug == slug)
+    )
+    if existing.scalar_one_or_none():
+        # 如果标题存在, 就追加用户id 和创建时间 避免冲突
+        slug = f"{slug}-{current_user.id}-{int(datetime.now(timezone.utc).timestamp() * 1000)}"
+    #TODO 可改进: 为什么不把用户id 和创建时间放在slug中? 或者作为小标题之类的
+    # 2. 渲染markdown
+    html = render_markdown(article_in.content)
+
+    # 3. 创建 ORM对象
+    article = Article(
+        title=article_in.title,
+        slug=slug,
+        content=article_in.content,
+        content_html=html,
+        cover_image=article_in.cover_image,
+        summary=article_in.summary,
+        is_published=article_in.is_published, #NOTE 暂定默认不发布
+        author_id=current_user.id,
+        category_id=article_in.category_id,
+    )
+    # 4. 处理标签关联: 如果有标签, 就关联 赋值给 `article.tags`列表
+    if article_in.tags_id:
+        tags = await db.execute(
+            select(Tag).where(Tag.id.in_(article_in.tags_id))
+        )
+        tags = tags.scalars().all()
+        article.tags = list(tags) # 赋值给 `article.tags`列表
+
+    db.add(article)
+    await db.commit()
+    await db.refresh(article)
+
+    return await get_article_by_slug(db, article.slug)
+
+
+@router.put("/{slug}", response_model=ArticleOut)
+async def update_article(
+    slug: str,
+    article_in: ArticleUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    ## 更新文章, 发布
+    1. 获取文章
+    2. 检查权限(只允许author更新)
+    3. 特殊字段的处理
+    4. 更新文章(包括标签关联与更新时间)
+    """
+    
+    # 1. 获取文章
+    article = await get_article_by_slug(db, slug)
+    if not article:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="文章不存在")
+
+    # 2. 检查权限(只允许author更新)
+    if current_user.id != article.author_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="权限不足,注: 只有作者本人可修改"
+        )
+
+    # 3. 特殊字段的处理
+    update_data = article_in.model_dump(exclude_unset=True, exclude={"tags_id"})
+    # 标签需要进行 额外查询, 故单独提取
+    for key, value in update_data.items():
+        setattr(article, key, value) # setattr(对象, 属性名, 属性值)
+
+    # 修改标题时, slug需要重新生成
+    if "title" in update_data:
+        article.slug = slugify(update_data["title"])
+    # 修改内容时, 需要重新渲染markdown
+    if "content" in update_data:
+        article.content_html = render_markdown(update_data["content"])
+    
+    # 4. 更新文章(包括标签关联与更新时间)
+    if article_in.tags_id is not None:
+        tags_result = await db.execute(
+            select(Tag).where(Tag.id.in_(article_in.tags_id))
+        )
+        article.tags = list(tags_result.scalars().all())
+        # 传了 tag_ids（即使空列表），则替换当前标签集合
+    article.updated_at = datetime.now()
+
+    await db.commit()
+    return await get_article_by_slug(db, article.slug)
+
+@router.delete("/{slug}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_article(
+    slug: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """删除文章(只有author/admin可删除)
+    1. 获取文章
+    2. 检查权限(只允许author/admin可删除)
+    3. 删除文章
+    """
+    article = await get_article_by_slug(db, slug)
+    if not article:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="文章不存在")
+
+    # 2. 检查权限(只允许author/admin可删除)
+    if current_user.id != article.author_id and current_user.role != UserRole.ADMIN.value:
+        # 两个条件都不满足, 既不是author, 也不是admin
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="权限不足,注: 只有作者本人或管理员可删除"
+        )
+    
+    # 3. 删除文章
+    article.is_deleted = True # 软删除, 不物理删除 
+    await db.commit()
+    return None
+    
+    

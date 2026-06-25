@@ -45,6 +45,14 @@ async def register(user_data: UserCreate,
         logger.error(f"用户名'{user_data.username}'已存在")
         raise HTTPException(status_code=400, detail="用户名已存在")
 
+    # 检查邮箱是否已存在
+    existing_email = await db.execute(
+        select(User).where(User.email == user_data.email)
+    )
+    if existing_email.scalar_one_or_none():
+        logger.error(f"邮箱'{user_data.email}'已存在")
+        raise HTTPException(status_code=400, detail="邮箱已存在")
+
     # 创建用户实例(以 ORM 对象)
     new_user = User(
         username=user_data.username,

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from sqlalchemy import String, Boolean
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 import enum
 
@@ -41,4 +41,6 @@ class User(Base):
         #使用 lambda 确保每次创建对象时都重新获取当前时间
         # （而不是模型定义时的固定时间）
     )
+
+    articles = relationship("Article", back_populates="author")
 

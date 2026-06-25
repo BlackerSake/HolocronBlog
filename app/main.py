@@ -9,6 +9,7 @@ import logging
 import os
 from app.api.v1.endpoints import auth, users
 from app.routers import categories, tags
+from app.routers import articles
 
 log_dir = "/Alpha/College_new/HolocronBlog/logs"
 if not os.path.exists(log_dir):
@@ -50,9 +51,14 @@ app.include_router(users.router,
                    tags=["Users"])
 app.include_router(categories.router)
 app.include_router(tags.router)
+app.include_router(articles.router)
+
+
+
+
 origins = [
-    "http://localhost.com",
-    "https://localhost.com",
+    "http://localhost:8848",
+    "https://localhost:8848",
     "http://127.0.0.1:8848",
     "https://127.0.0.1:8848"
 ]
