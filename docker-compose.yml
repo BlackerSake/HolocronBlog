@@ -1,0 +1,12 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8848:8848"
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./data/holocron.db
+      - SECRET_KEY=${SECRET_KEY:-holocron_secret_key}
+      - ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+    volumes:
+      - ./data:/app/data
