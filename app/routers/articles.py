@@ -9,7 +9,7 @@ from app.models.user import User, UserRole
 from app.models.article import Article
 from app.models.tag import Tag
 from app.schemas.article import ArticleCreate, ArticleUpdate, ArticleOut, ArticleListItem
-from app.schemas.common import Paginated
+from app.schemas.common import Paginated, Response
 from app.services.article_service import slugify, render_markdown
 
 router = APIRouter(prefix="/articles", tags=["Articles"])
@@ -37,7 +37,7 @@ async def get_article_by_slug(db: AsyncSession, slug: str) -> Article | None:
     )
     return result.scalar_one_or_none()
 
-@router.get("", response_model=Paginated[ArticleListItem])
+@router.get("", response_model=Response[Paginated[ArticleListItem]])
 async def list_articles(
     page: int = Query(1, ge=1), # 默认第一页,最小1
     per_page: int = Query(10, ge=1, le=100), # 默认每页10条,1-100
@@ -77,25 +77,25 @@ async def list_articles(
     articles = result.scalars().all() # 获取结果
     
     items = [ArticleListItem.model_validate(article) for article in articles]
-    return {
+    return Response(data={
         "items": items,
         "total": total,
         "page": page,
         "per_page": per_page,
         "pages": (total + per_page - 1) // per_page,
-    }
+    })
 
-@router.get("/{slug}", response_model=ArticleOut)
+@router.get("/{slug}", response_model=Response[ArticleOut])
 async def get_article(slug: str, db: AsyncSession = Depends(get_db)):
     """获取一篇文章"""
     article = await get_published_article_by_slug(db, slug)
     if not article:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail="文章不存在")
-    return ArticleOut.model_validate(article)
+    return Response(data=ArticleOut.model_validate(article))
 
 
-@router.post("", response_model=ArticleOut)
+@router.post("", response_model=Response[ArticleOut])
 async def create_article(
     article_in: ArticleCreate,
     db: AsyncSession = Depends(get_db),
@@ -144,10 +144,11 @@ async def create_article(
     await db.commit()
     await db.refresh(article)
 
-    return await get_article_by_slug(db, article.slug)
+    article = await get_article_by_slug(db, article.slug)
+    return Response(data=article)
 
 
-@router.put("/{slug}", response_model=ArticleOut)
+@router.put("/{slug}", response_model=Response[ArticleOut])
 async def update_article(
     slug: str,
     article_in: ArticleUpdate,
@@ -198,7 +199,8 @@ async def update_article(
     article.updated_at = datetime.now()
 
     await db.commit()
-    return await get_article_by_slug(db, article.slug)
+    article = await get_article_by_slug(db, article.slug)
+    return Response(data=article)
 
 @router.delete("/{slug}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_article(

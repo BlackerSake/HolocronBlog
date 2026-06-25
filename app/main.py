@@ -10,7 +10,7 @@ import os
 from app.api.v1.endpoints import auth, users
 from app.routers import categories, tags
 from app.routers import articles
-
+from app.core.exceptions import register_exception_handlers
 log_dir = "/Alpha/College_new/HolocronBlog/logs"
 if not os.path.exists(log_dir):
     os.makedirs(log_dir)
@@ -42,7 +42,7 @@ app = FastAPI(
     version = settings.APP_VERSION,
     lifespan=lifespan,
     )
-
+register_exception_handlers(app)
 app.include_router(auth.router,
                    prefix="/api/v1",
                    tags=["Authentication"])

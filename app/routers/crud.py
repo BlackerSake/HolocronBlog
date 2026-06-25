@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.user import User
+from app.schemas.common import Response
 
 import logging
 logging.getLogger("router.crud").setLevel(logging.INFO)
@@ -30,15 +31,15 @@ def create_crud_router(
 
     router = APIRouter(prefix=prefix,tags=tags)
     
-    @router.get("",response_model=list[output_schema])
+    @router.get("",response_model=Response[list[output_schema]])
     async def list_item(db: AsyncSession = Depends(get_db)):
         """获取列表"""
         result =  await db.execute(
             select(model).order_by(model.id)
         )
-        return result.scalars().all()
+        return Response(data=result.scalars().all())
     
-    @router.post("",response_model=output_schema,
+    @router.post("",response_model=Response[output_schema],
              status_code=status.HTTP_201_CREATED)
     async def create_item(
         item_in: create_schema, # pyright: ignore[reportInvalidTypeForm]
@@ -66,9 +67,9 @@ def create_crud_router(
         db.add(new_item)
         await db.commit()
         await db.refresh(new_item)
-        return new_item
+        return Response(data=new_item)
     
-    @router.put("/{item_id}",response_model=output_schema)
+    @router.put("/{item_id}",response_model=Response[output_schema])
     async def update_item(
         item_id: int,
         item_in: update_schema, # pyright: ignore[reportInvalidTypeForm]
@@ -99,8 +100,8 @@ def create_crud_router(
 
         await db.commit()
         await db.refresh(item)
-        return item
-    
+        return Response(data=item)
+
     @router.delete("/{item_id}",status_code=status.HTTP_204_NO_CONTENT)
     async def delete_item(
         item_id: int,

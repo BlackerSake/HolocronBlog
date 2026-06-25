@@ -9,6 +9,7 @@ from app.core.security import verify_password, create_access_token
 from app.models.user import User
 from app.schemas.user import UserCreate, UserOut
 from app.schemas.token import Token
+from app.schemas.common import Response
 from datetime import timedelta
 from jose import JWTError, jwt
 
@@ -30,8 +31,8 @@ def hash_password(password: str) -> str:
     return pwd_context.hash(password_bytes)
 
 @router.post("/register",
-             response_model=UserOut, # 响应模型
-             status_code=status.HTTP_201_CREATED) # 状态码
+             response_model=Response[UserOut],
+             status_code=status.HTTP_201_CREATED)
 async def register(user_data: UserCreate,
                    db: AsyncSession = Depends(get_db),
                    ):
@@ -63,10 +64,10 @@ async def register(user_data: UserCreate,
     # ORM 添加并提交 (⚠️注意: 这里只是内存对象,提交之后才会写入数据库)
     db.add(new_user)
     await db.commit()
-    await db.refresh(new_user) # 刷新对象, 获取自增id 和 时间
-    return new_user
+    await db.refresh(new_user)
+    return Response(data=new_user)
     
-@router.post("/login", response_model=Token)
+@router.post("/login", response_model=Response[Token])
 async def login(
     from_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),
@@ -101,7 +102,7 @@ async def login(
     access_token = create_access_token(
         data={"sub": user.username}
     )
-    return Token(access_token=access_token, token_type="bearer")
+    return Response(data=Token(access_token=access_token, token_type="bearer"))
     # bearer : 持有即授权 
     # 服务器不检查客户端身份（比如是不是同一个 IP、同一个设备），
     # 只看 token 本身是否有效。所以谁“持有”（bear）这个 token，谁就能访问资源。
