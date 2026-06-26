@@ -58,9 +58,11 @@ async def get_current_user(
     return user
 
 
-async def get_current_admin_user(
-        current_user: User = Depends(get_current_user),
-) -> User:
+async def get_current_admin_user(current_user: User = Depends(get_current_user)) -> User:
+    """
+    ## 获取当前用户role
+    确保当前用户为管理员
+    """
     if current_user.role != UserRole.ADMIN.value:
         raise HTTPException(
             status_code=403,

@@ -160,7 +160,18 @@ img { max-width: 100%; height: auto; }
 .page-subtitle {
   color: var(--text-muted);
   font-size: 0.92rem;
+  margin-bottom: 1.5rem;
+}
+
+.epigraph {
   margin-bottom: 2.5rem;
+  padding: 1.25rem 1.5rem;
+  border-left: 2px solid var(--teal);
+  background: var(--teal-bg);
+  font-size: 0.88rem;
+  line-height: 1.9;
+  color: var(--text-secondary);
+  border-radius: 0 var(--radius) var(--radius) 0;
 }
 
 /* ── Buttons ── */
@@ -646,8 +657,29 @@ label {
 .sl-icon { opacity: 0.5; font-size: 0.85rem; }
 
 .sidebar-footer {
-  padding: 1rem 1.2rem;
+  padding: 0.8rem 1.2rem;
   border-top: 1px solid var(--border-light);
+}
+
+.sidebar-footer .user-info {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+.sidebar-footer .user-name {
+  color: var(--text-primary);
+}
+
+.sidebar-footer .user-role {
+  color: var(--teal);
+  font-size: 0.65rem;
+  padding: 0.1rem 0.35rem;
+  border: 1px solid var(--teal);
+  border-radius: 3px;
 }
 
 .sidebar-footer .logout-btn {

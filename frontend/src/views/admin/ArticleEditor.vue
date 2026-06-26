@@ -52,7 +52,7 @@
           <button type="submit" class="btn btn-primary" :disabled="saving">
             {{ saving ? '保存中...' : (isEdit ? '更新' : '创建') }}
           </button>
-          <router-link to="/admin/articles" class="btn">取消</router-link>
+          <router-link to="/backend/articles" class="btn">取消</router-link>
         </div>
       </form>
     </div>
@@ -93,7 +93,7 @@ async function handleSave() {
     } else {
       await articlesAPI.create(payload)
     }
-    router.push('/admin/articles')
+    router.push('/backend/articles')
   } catch (e) {
     error.value = e.response?.data?.detail || '保存失败'
   } finally {
@@ -111,7 +111,7 @@ onMounted(async () => {
 
   if (isEdit.value) {
     try {
-      const article = await articlesAPI.get(route.params.slug)
+      const article = await articlesAPI.backendGet(route.params.slug)
       form.value = {
         title: article.title,
         content: article.content,

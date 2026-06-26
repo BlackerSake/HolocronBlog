@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, get_current_admin_user
 from app.models.user import User
 from app.schemas.common import Response
 from app.core.log import log_call
@@ -25,8 +25,9 @@ def create_crud_router(
         tags: list[str],
         resource_name: str,
 ) -> APIRouter:
-    """创建通用CRUD路由
-    生成 list(公开列表), create(创建), update(更新), delete(删除)四个路由
+    """
+    ## 创建通用CRUD路由
+    生成 list(公开列表), create(创建), update(更新), delete(删除)四个路由  
     其中create, update, delete需要 admin 权限
     """
 
@@ -35,7 +36,10 @@ def create_crud_router(
     @router.get("",response_model=Response[list[output_schema]])
     @log_call
     async def list_item(db: AsyncSession = Depends(get_db)):
-        """获取列表"""
+        """
+        ## 获取列表
+        user 可以查看所有item
+        """
         result =  await db.execute(
             select(model).order_by(model.id)
         )
@@ -47,15 +51,12 @@ def create_crud_router(
     async def create_item(
         item_in: create_schema, # pyright: ignore[reportInvalidTypeForm]
         db: AsyncSession = Depends(get_db),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(get_current_admin_user),
     ):  
         """
-        新建 item
+        ## 新建 item
+        仅 admin 角色可以创建(通过依赖检查完成)
         """
-        # 检查用户权限
-        if current_user.role != "admin":
-            raise HTTPException(status_code=403, detail="只有admin可以创建")
-        
         # 检查名称是否有重复
         existing = await db.execute(
             select(model).where(model.name == item_in.name)
@@ -78,14 +79,12 @@ def create_crud_router(
         item_id: int,
         item_in: update_schema, # pyright: ignore[reportInvalidTypeForm]
         db: AsyncSession = Depends(get_db),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(get_current_admin_user),
     ):
         """
-        更新 item
+        ## 更新 item
+        仅 admin 角色可以创建(通过依赖检查完成)
         """
-        # 检查用户权限
-        if current_user.role != "admin":
-            raise HTTPException(status_code=403, detail="只有admin可以更新")
         
         result = await db.execute(
             select(model).where(model.id == item_id)
@@ -111,14 +110,12 @@ def create_crud_router(
     async def delete_item(
         item_id: int,
         db: AsyncSession = Depends(get_db),
-        current_user: User = Depends(get_current_user),
+        current_user: User = Depends(get_current_admin_user),
     ):
         """
-        删除 item
+        ## 删除 item
+        仅 admin 角色可以创建(通过依赖检查完成)
         """
-        # 检查用户权限
-        if current_user.role != "admin":
-            raise HTTPException(status_code=403, detail="只有admin可以删除")
         
         result = await db.execute(
             select(model).where(model.id == item_id)

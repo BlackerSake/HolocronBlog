@@ -17,14 +17,19 @@ export function useAuth() {
   async function login(username, password) {
     const data = await authAPI.login(username, password)
     save(data.access_token, { username })
+    await fetchUser()
     return data
   }
 
+  async function register(username, email, password) {
+    return authAPI.register({ username, email: email || undefined, password })
+  }
+
   async function fetchUser() {
-    // The backend /api/v1/users/me endpoint would be needed;
-    // for now use the token decode info. The token contains username in "sub".
-    // We actually don't have a /users/me endpoint, so we store minimal user info on login.
-    // ponytail: no dedicated user-fetch endpoint on backend, rely on login data
+    if (!state.token) return null
+    const user = await authAPI.me()
+    save(state.token, user)
+    return user
   }
 
   function logout() {
@@ -34,5 +39,5 @@ export function useAuth() {
     localStorage.removeItem('user')
   }
 
-  return { ...toRefs(state), login, fetchUser, logout }
+  return { ...toRefs(state), login, register, fetchUser, logout }
 }

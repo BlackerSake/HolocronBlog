@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from datetime import datetime, timezone
 from app.core.database import get_db
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, get_current_admin_user
 from app.models.user import User, UserRole
 from app.models.article import Article
 from app.models.tag import Tag
@@ -15,25 +15,15 @@ from app.core.log import log_call
 
 router = APIRouter(prefix="/articles", tags=["Articles"])
 
-@log_call
-async def get_published_article_by_slug(db: AsyncSession, slug: str) -> Article | None:
-    """
-    # 根据slug获取一篇已发布的未删除文章
-    主页面查询,使用这个接口
-    """
-    result = await db.execute(
-        select(Article).where(Article.slug == slug,
-                              Article.is_deleted == False,
-                              Article.is_published == True)
-        .options(selectinload(Article.author),
-        selectinload(Article.category),
-        selectinload(Article.tags)),
-    )
-    return result.scalar_one_or_none()
 
 @log_call
-async def get_article_by_slug(db: AsyncSession, slug: str) -> Article | None:
-    """根据slug获取一篇未删除文章（不限发布状态）"""
+async def _get_article_by_slug(db: AsyncSession, 
+                              slug: str,
+                              ) -> Article | None:
+    """
+    ## 根据slug获取一篇未删除文章（不限发布状态）
+    查询使用这个接口
+    """
     result = await db.execute(
         select(Article).where(Article.slug == slug,
                               Article.is_deleted == False)
@@ -54,7 +44,7 @@ async def list_articles(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    # 主页面获取列表
+    # 主页面默认获取列表
     主页面获取列表使用这个接口
     查询等也是这个接口
     """
@@ -96,20 +86,36 @@ async def list_articles(
         "pages": (total + per_page - 1) // per_page,
     })
 
-@router.get("/admin/list", response_model=Response[Paginated[ArticleListItem]])
+@router.get("/backend/list", response_model=Response[Paginated[ArticleListItem]])
 @log_call
-async def list_admin_articles(
+async def list_backend_articles(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """获取所有未删除文章（含草稿），author 见自己的，admin 见全部"""
+    """
+    ## backend 默认获取文章list
+    admin 获取自己写的所有文章 ,以及所有已发布文章  
+    author 获取自己所有文章  
+    后台默认使用这个接口.
+    """
+
     if current_user.role == UserRole.ADMIN.value:
-        query = select(Article).where(Article.is_deleted == False)
-    else:
-        query = select(Article).where(Article.author_id == current_user.id,
-                                      Article.is_deleted == False)
+        # 如果是admin
+        query = select(Article).where(
+            Article.is_deleted == False,
+            or_( # 满足任一条件即可 
+                # admin & author 获取自己写的所有文章 ,以及所有已发布文章
+                Article.is_published == True,
+                Article.author_id == current_user.id,
+            )
+        )
+    else: # 如果是 author , 则获取自己所有文章
+        query = select(Article).where(
+            Article.is_deleted == False,
+            Article.author_id == current_user.id
+        )
 
     count_query = select(func.count()).select_from(query.subquery())
     total = (await db.execute(count_query)).scalar()
@@ -132,12 +138,34 @@ async def list_admin_articles(
     })
 
 
+@router.get("/backend/detail/{slug}", response_model=Response[ArticleOut])
+@log_call
+async def get_backend_article(
+    slug: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    ## 后台用以获取一篇特定文章的内容
+    不限发布状态,author 可以检索自己的草稿
+    """
+    article = await _get_article_by_slug(db, slug)
+    if not article:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="文章不存在")
+    return Response(data=ArticleOut.model_validate(article))
+
+
 @router.get("/{slug}", response_model=Response[ArticleOut])
 @log_call
 async def get_article(slug: str, db: AsyncSession = Depends(get_db)):
-    """获取一篇文章"""
-    article = await get_article_by_slug(db, slug)
-    if not article:
+    """
+    ## 获取一篇特定文章的内容
+    该文章必须存在且是已发布  
+    避免草稿泄露  
+    """
+    article = await _get_article_by_slug(db, slug)
+    if not article or not article.is_published: # 防御措施
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail="文章不存在")
     return Response(data=ArticleOut.model_validate(article))
@@ -193,7 +221,7 @@ async def create_article(
     await db.commit()
     await db.refresh(article)
 
-    article = await get_article_by_slug(db, article.slug)
+    article = await _get_article_by_slug(db, article.slug)
     return Response(data=article)
 
 
@@ -214,7 +242,7 @@ async def update_article(
     """
     
     # 1. 获取文章
-    article = await get_article_by_slug(db, slug)
+    article = await _get_article_by_slug(db, slug)
     if not article:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail="文章不存在")
@@ -249,7 +277,32 @@ async def update_article(
     article.updated_at = datetime.now(timezone.utc)
 
     await db.commit()
-    article = await get_article_by_slug(db, article.slug)
+    article = await _get_article_by_slug(db, article.slug)
+    return Response(data=article)
+
+@router.patch("/{slug}/unpublish",response_model=Response[ArticleOut])
+@log_call
+async def unpublish_article(slug: str,
+                           db: AsyncSession = Depends(get_db),
+                           current_user: User = Depends(get_current_admin_user)
+                           ):
+    """
+    ## 取消发布文章
+    将文章状态改为草稿（仅限管理员）
+    """
+    article = await _get_article_by_slug(db, slug)
+    if not article:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="该文章不存在",
+        )
+    if not article.is_published:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="该文章已经是草稿状态",
+        )
+    article.is_published = False
+    await db.commit()
     return Response(data=article)
 
 @router.delete("/{slug}", status_code=status.HTTP_204_NO_CONTENT)
@@ -264,7 +317,7 @@ async def delete_article(
     2. 检查权限(只允许author/admin可删除)
     3. 删除文章
     """
-    article = await get_article_by_slug(db, slug)
+    article = await _get_article_by_slug(db, slug)
     if not article:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail="文章不存在")
@@ -281,5 +334,4 @@ async def delete_article(
     article.is_deleted = True # 软删除, 不物理删除 
     await db.commit()
     return None
-    
     

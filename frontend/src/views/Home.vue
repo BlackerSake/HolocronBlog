@@ -1,9 +1,15 @@
 <template>
   <div class="home-page container">
     <header class="page-header animate-in">
-      <h1 class="page-title">档案馆</h1>
-      <p class="page-subtitle">共 {{ total }} 条记录 &middot; 按时间排序</p>
+      <h1 class="page-title">Holocron Blog</h1>
     </header>
+
+    <div class="epigraph animate-in animate-in-d1">
+      <p>凡修习者，必有所录。</p>
+      <p>学而时习，恐其或忘；思而日省，恐其或失。</p>
+      <p>故录之于此。</p>
+      <p>后之览者，亦将有感于斯文。</p>
+    </div>
 
     <!-- 筛选栏 -->
     <div class="filter-bar animate-in animate-in-d1">
@@ -33,6 +39,8 @@
         @click="toggleFilter('tag', tag.id)"
       >#{{ tag.name }}</button>
     </div>
+
+    <p class="page-subtitle">共 {{ total }} 条记录 &middot; 按时间排序</p>
 
     <!-- 文章列表 -->
     <div v-if="loading" class="loading">加载中<span class="dots"><span>.</span><span>.</span><span>.</span></span></div>

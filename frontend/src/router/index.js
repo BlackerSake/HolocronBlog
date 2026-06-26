@@ -1,7 +1,6 @@
 import Home from '../views/Home.vue'
 import ArticleDetail from '../views/ArticleDetail.vue'
 import Login from '../views/Login.vue'
-import AdminDashboard from '../views/admin/Dashboard.vue'
 import AdminArticles from '../views/admin/Articles.vue'
 import ArticleEditor from '../views/admin/ArticleEditor.vue'
 import AdminCategories from '../views/admin/Categories.vue'
@@ -14,16 +13,16 @@ export const routes = [
   { path: '/articles/:slug', name: 'article', component: ArticleDetail },
   { path: '/login', name: 'login', component: Login },
   {
-    path: '/admin',
+    path: '/backend',
     component: AdminLayout,
     meta: { requiresAuth: true },
     children: [
-      { path: '', name: 'admin', component: AdminDashboard },
+      { path: '', component: AdminArticles },
       { path: 'articles', name: 'admin-articles', component: AdminArticles },
       { path: 'articles/new', name: 'admin-article-new', component: ArticleEditor },
       { path: 'articles/:slug/edit', name: 'admin-article-edit', component: ArticleEditor },
-      { path: 'categories', name: 'admin-categories', component: AdminCategories },
-      { path: 'tags', name: 'admin-tags', component: AdminTags },
+      { path: 'categories', name: 'admin-categories', component: AdminCategories, meta: { requiresAdmin: true } },
+      { path: 'tags', name: 'admin-tags', component: AdminTags, meta: { requiresAdmin: true } },
     ]
   }
 ]
@@ -44,6 +43,11 @@ export async function beforeEach(to, from, next) {
         next({ name: 'login', query: { redirect: to.fullPath } })
         return
       }
+    }
+    // admin-only routes
+    if (to.meta.requiresAdmin && auth.user?.value?.role !== 'admin') {
+      next({ name: 'admin-articles' })
+      return
     }
   }
   next()

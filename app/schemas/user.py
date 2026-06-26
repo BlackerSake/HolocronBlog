@@ -4,7 +4,7 @@ from datetime import datetime
 # 注册时,用户需要提交的参数
 class UserCreate(BaseModel):
     username: str
-    email: EmailStr
+    email: EmailStr | None = None
     password: str
 
 # 返回给前端时的数据 (隐藏密码)

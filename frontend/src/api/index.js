@@ -11,7 +11,7 @@ api.interceptors.request.use(config => {
 api.interceptors.response.use(
   res => res,
   err => {
-    if (err.response?.status === 401) {
+    if (err.response?.status === 401 && !err.config.url.includes('/login')) {
       localStorage.removeItem('token')
       localStorage.removeItem('user')
       window.location.href = '/login'
@@ -38,6 +38,9 @@ export const authAPI = {
 
   register: data =>
     api.post('/api/v1/register', data).then(unwrap),
+
+  me: () =>
+    api.get('/api/v1/users/me').then(unwrap),
 }
 
 /* ── Articles ── */
@@ -45,8 +48,11 @@ export const articlesAPI = {
   list: (params = {}) =>
     api.get('/articles', { params }).then(unwrap),
 
-  adminList: (params = {}) =>
-    api.get('/articles/admin/list', { params }).then(unwrap),
+  backendList: (params = {}) =>
+    api.get('/articles/backend/list', { params }).then(unwrap),
+
+  backendGet: slug =>
+    api.get(`/articles/backend/detail/${slug}`).then(unwrap),
 
   get: slug =>
     api.get(`/articles/${slug}`).then(unwrap),
@@ -56,6 +62,9 @@ export const articlesAPI = {
 
   update: (slug, data) =>
     api.put(`/articles/${slug}`, data).then(unwrap),
+
+  unpublish: slug =>
+    api.patch(`/articles/${slug}/unpublish`).then(unwrap),
 
   delete: slug =>
     api.delete(`/articles/${slug}`),

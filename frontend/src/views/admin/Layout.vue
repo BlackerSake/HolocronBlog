@@ -8,20 +8,21 @@
         </router-link>
       </div>
       <nav class="sidebar-nav">
-        <router-link to="/admin" class="sidebar-link" :class="{ active: $route.path === '/admin' }">
-          <span class="sl-icon">◇</span> 概览
-        </router-link>
-        <router-link to="/admin/articles" class="sidebar-link" :class="{ active: $route.path.startsWith('/admin/articles') }">
+        <router-link to="/backend/articles" class="sidebar-link" :class="{ active: $route.path === '/backend' || $route.path.startsWith('/backend/articles') }">
           <span class="sl-icon">⊞</span> 文章
         </router-link>
-        <router-link to="/admin/categories" class="sidebar-link" :class="{ active: $route.path === '/admin/categories' }">
+        <router-link v-if="auth.user?.value?.role === 'admin'" to="/backend/categories" class="sidebar-link" :class="{ active: $route.path === '/backend/categories' }">
           <span class="sl-icon">⊡</span> 分类
         </router-link>
-        <router-link to="/admin/tags" class="sidebar-link" :class="{ active: $route.path === '/admin/tags' }">
+        <router-link v-if="auth.user?.value?.role === 'admin'" to="/backend/tags" class="sidebar-link" :class="{ active: $route.path === '/backend/tags' }">
           <span class="sl-icon">#</span> 标签
         </router-link>
       </nav>
       <div class="sidebar-footer">
+        <div class="user-info">
+          <span class="user-name">{{ auth.user?.value?.username }}</span>
+          <span class="user-role">{{ auth.user?.value?.role }}</span>
+        </div>
         <button class="nav-link logout-btn" @click="handleLogout">退出管理</button>
       </div>
     </aside>

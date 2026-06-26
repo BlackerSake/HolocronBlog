@@ -23,6 +23,13 @@ logger = logging.getLogger(__name__)
 pwd_content = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 async def create_admin():
+    """创建 admin 用户"""
+    
+    """
+    username = "admin"
+    email = "admin@exapmple.com"
+    password = "admin"
+    """
     username = "johnnypoter"
     email = "johnnypoter7435@gmail.com"
     password = "133466"

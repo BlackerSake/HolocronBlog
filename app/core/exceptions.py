@@ -4,9 +4,14 @@ from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from pydantic import ValidationError
 from app.schemas.common import ErrorResponse
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     """处理 FastAPI/Starlette 的 HTTPException（401/403/404等）"""
+    logger.warning("%s %s → %s", request.method, request.url.path, exc.detail)
     return JSONResponse(
         status_code=exc.status_code,
         content=ErrorResponse(
@@ -19,7 +24,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
 async def validation_error_handler(request: Request, exc: RequestValidationError):
     """处理 Pydantic 请求参数校验错误（422）"""
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content=ErrorResponse(
             code=422,
             message="Request validation failed",

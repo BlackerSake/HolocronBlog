@@ -3,14 +3,18 @@
     <div class="login-card animate-in">
       <div class="login-header">
         <span class="logo-icon" style="font-size:1.5rem;">◇</span>
-        <h1 class="login-title">管理员登录</h1>
-        <p class="login-subtitle">验证身份以进入管理后台</p>
+        <h1 class="login-title">{{ isRegister ? '注册账号' : '登录账号' }}</h1>
+        <p class="login-subtitle">{{ isRegister ? '创建账号以管理内容' : '验证身份以进入管理后台' }}</p>
       </div>
 
-      <form @submit.prevent="handleLogin">
+      <form @submit.prevent="handleSubmit">
         <div class="form-group">
           <label>用户名</label>
           <input v-model="username" class="input" placeholder="请输入用户名" required autocomplete="username" />
+        </div>
+        <div class="form-group" v-if="isRegister">
+          <label>邮箱</label>
+          <input v-model="email" type="email" class="input" placeholder="选填" />
         </div>
         <div class="form-group">
           <label>密码</label>
@@ -18,9 +22,15 @@
         </div>
         <p v-if="error" style="color:var(--danger);font-size:0.82rem;margin-bottom:1rem;">{{ error }}</p>
         <button type="submit" class="btn btn-primary" style="width:100%;" :disabled="loading">
-          {{ loading ? '验证中...' : '进入档案馆' }}
+          {{ loading ? '处理中...' : (isRegister ? '注册并进入' : '进入Holocron') }}
         </button>
       </form>
+
+      <p style="text-align:center;margin-top:1.5rem;font-size:0.82rem;color:var(--text-muted);">
+        <a href="#" @click.prevent="toggleMode" style="color:var(--teal);">
+          {{ isRegister ? '已有账号？登录' : '没有账号？注册' }}
+        </a>
+      </p>
     </div>
   </div>
 </template>
@@ -35,18 +45,28 @@ const route = useRoute()
 const auth = useAuth()
 
 const username = ref('')
+const email = ref('')
 const password = ref('')
 const error = ref('')
 const loading = ref(false)
+const isRegister = ref(false)
 
-async function handleLogin() {
+function toggleMode() {
+  isRegister.value = !isRegister.value
+  error.value = ''
+}
+
+async function handleSubmit() {
   error.value = ''
   loading.value = true
   try {
+    if (isRegister.value) {
+      await auth.register(username.value, email.value, password.value)
+    }
     await auth.login(username.value, password.value)
-    router.push(route.query.redirect || '/admin')
+    router.push(route.query.redirect || '/backend')
   } catch (e) {
-    error.value = e.response?.data?.detail || '登录失败'
+    error.value = e.response?.data?.message || e.response?.data?.detail || (isRegister.value ? '注册失败' : '登录失败')
   } finally {
     loading.value = false
   }
