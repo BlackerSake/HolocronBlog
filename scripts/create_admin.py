@@ -1,7 +1,7 @@
 
 """
 创建 admin 用户
-
+docker compose exec api python scripts/create_admin.py
 python -m scripts.create_admin
 """
 import sys

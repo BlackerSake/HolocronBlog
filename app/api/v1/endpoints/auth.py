@@ -6,6 +6,7 @@ from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordRequestForm
 from app.core.database import get_db
 from app.core.security import verify_password, create_access_token
+from app.core.log import log_call
 from app.models.user import User
 from app.schemas.user import UserCreate, UserOut
 from app.schemas.token import Token
@@ -33,6 +34,7 @@ def hash_password(password: str) -> str:
 @router.post("/register",
              response_model=Response[UserOut],
              status_code=status.HTTP_201_CREATED)
+@log_call
 async def register(user_data: UserCreate,
                    db: AsyncSession = Depends(get_db),
                    ):
@@ -68,6 +70,7 @@ async def register(user_data: UserCreate,
     return Response(data=new_user)
     
 @router.post("/login", response_model=Response[Token])
+@log_call
 async def login(
     from_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),

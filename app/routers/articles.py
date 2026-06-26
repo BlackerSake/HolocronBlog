@@ -11,11 +11,16 @@ from app.models.tag import Tag
 from app.schemas.article import ArticleCreate, ArticleUpdate, ArticleOut, ArticleListItem
 from app.schemas.common import Paginated, Response
 from app.services.article_service import slugify, render_markdown
+from app.core.log import log_call
 
 router = APIRouter(prefix="/articles", tags=["Articles"])
 
+@log_call
 async def get_published_article_by_slug(db: AsyncSession, slug: str) -> Article | None:
-    """根据slug获取一篇已发布的未删除文章"""
+    """
+    # 根据slug获取一篇已发布的未删除文章
+    主页面查询,使用这个接口
+    """
     result = await db.execute(
         select(Article).where(Article.slug == slug,
                               Article.is_deleted == False,
@@ -26,6 +31,7 @@ async def get_published_article_by_slug(db: AsyncSession, slug: str) -> Article 
     )
     return result.scalar_one_or_none()
 
+@log_call
 async def get_article_by_slug(db: AsyncSession, slug: str) -> Article | None:
     """根据slug获取一篇未删除文章（不限发布状态）"""
     result = await db.execute(
@@ -38,6 +44,7 @@ async def get_article_by_slug(db: AsyncSession, slug: str) -> Article | None:
     return result.scalar_one_or_none()
 
 @router.get("", response_model=Response[Paginated[ArticleListItem]])
+@log_call
 async def list_articles(
     page: int = Query(1, ge=1), # 默认第一页,最小1
     per_page: int = Query(10, ge=1, le=100), # 默认每页10条,1-100
@@ -46,7 +53,11 @@ async def list_articles(
     search: str | None = None, #关键词搜索
     db: AsyncSession = Depends(get_db),
 ):
-    """获取列表"""
+    """
+    # 主页面获取列表
+    主页面获取列表使用这个接口
+    查询等也是这个接口
+    """
     query = select(Article).where(Article.is_deleted == False,
                                   Article.is_published == True)
     
@@ -85,10 +96,47 @@ async def list_articles(
         "pages": (total + per_page - 1) // per_page,
     })
 
+@router.get("/admin/list", response_model=Response[Paginated[ArticleListItem]])
+@log_call
+async def list_admin_articles(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """获取所有未删除文章（含草稿），author 见自己的，admin 见全部"""
+    if current_user.role == UserRole.ADMIN.value:
+        query = select(Article).where(Article.is_deleted == False)
+    else:
+        query = select(Article).where(Article.author_id == current_user.id,
+                                      Article.is_deleted == False)
+
+    count_query = select(func.count()).select_from(query.subquery())
+    total = (await db.execute(count_query)).scalar()
+
+    query = query.order_by(Article.created_at.desc()).offset(
+        (page - 1) * per_page).limit(per_page)
+    query = query.options(selectinload(Article.author),
+                          selectinload(Article.category),
+                          selectinload(Article.tags))
+
+    result = await db.execute(query)
+    articles = result.scalars().all()
+    items = [ArticleListItem.model_validate(article) for article in articles]
+    return Response(data={
+        "items": items,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": (total + per_page - 1) // per_page,
+    })
+
+
 @router.get("/{slug}", response_model=Response[ArticleOut])
+@log_call
 async def get_article(slug: str, db: AsyncSession = Depends(get_db)):
     """获取一篇文章"""
-    article = await get_published_article_by_slug(db, slug)
+    article = await get_article_by_slug(db, slug)
     if not article:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail="文章不存在")
@@ -96,6 +144,7 @@ async def get_article(slug: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("", response_model=Response[ArticleOut])
+@log_call
 async def create_article(
     article_in: ArticleCreate,
     db: AsyncSession = Depends(get_db),
@@ -149,6 +198,7 @@ async def create_article(
 
 
 @router.put("/{slug}", response_model=Response[ArticleOut])
+@log_call
 async def update_article(
     slug: str,
     article_in: ArticleUpdate,
@@ -196,13 +246,14 @@ async def update_article(
         )
         article.tags = list(tags_result.scalars().all())
         # 传了 tag_ids（即使空列表），则替换当前标签集合
-    article.updated_at = datetime.now()
+    article.updated_at = datetime.now(timezone.utc)
 
     await db.commit()
     article = await get_article_by_slug(db, article.slug)
     return Response(data=article)
 
 @router.delete("/{slug}", status_code=status.HTTP_204_NO_CONTENT)
+@log_call
 async def delete_article(
     slug: str,
     db: AsyncSession = Depends(get_db),
