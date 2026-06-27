@@ -168,12 +168,15 @@ async def get_hot_articles(db: AsyncSession = Depends(get_db)):
     """
     cache_key = "hot_articles"
 
-    # 1. 尝试从redis 读取缓存
-    cached_articles = await redis_client.get(cache_key)
-    if cached_articles:
-        return Response(data=json.loads(cached_articles))
+    # 1. 尝试从redis 读取缓存（失败则查 DB）
+    try:
+        cached_articles = await redis_client.get(cache_key)
+        if cached_articles:
+            return Response(data=json.loads(cached_articles))
+    except Exception:
+        pass
 
-    # 2. 缓存没有命中, 查询数据库
+    # 2. 缓存没有命中或 Redis 不可用, 查询数据库
     result = await db.execute(
         select(Article).where(
             Article.is_published == True,
@@ -186,8 +189,11 @@ async def get_hot_articles(db: AsyncSession = Depends(get_db)):
     articles = result.scalars().all()
     items = [ArticleListItem.model_validate(article) for article in articles]
 
-    # 3. 写入 redis 有效期 5 mins
-    await redis_client.set(cache_key, json.dumps([i.model_dump(mode="json") for i in items]), ex=300)
+    # 3. 写入 redis（失败不影响返回）
+    try:
+        await redis_client.set(cache_key, json.dumps([i.model_dump(mode="json") for i in items]), ex=300)
+    except Exception:
+        pass
     return Response(data=items)
 
 @router.get("/{slug}", response_model=Response[ArticleOut])
@@ -204,13 +210,14 @@ async def get_article(slug: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail="文章不存在")
 
-    # 浏览量计算 + 1
+    # 浏览量计算 + 1（Redis 不可用时跳过，不影响文章展示）
     views_key = f"article:views:{slug}"
-    await redis_client.incr(views_key)
-
-    # 缓存最高浏览量
-    views = await redis_client.get(views_key)
-    article.views = int(views or 0)
+    try:
+        await redis_client.incr(views_key)
+        views = await redis_client.get(views_key)
+        article.views = int(views or 0)
+    except Exception:
+        pass
 
     return Response(data=article)
 

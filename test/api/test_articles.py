@@ -113,7 +113,10 @@ class TestGetArticle:
 
     async def test_get_published(self, client: AsyncClient):
         """已发布文章 -> 200 + 完整详情"""
-        resp = await client.get("/articles/published-one")
+        with patch("app.routers.articles.redis_client") as mock_redis:
+            mock_redis.incr = AsyncMock(return_value=1)
+            mock_redis.get = AsyncMock(return_value="1")
+            resp = await client.get("/articles/published-one")
         assert resp.status_code == 200
         data = resp.json()["data"]
         assert data["title"] == "Published One"
@@ -123,7 +126,10 @@ class TestGetArticle:
         self, client: AsyncClient
     ):
         """文章详情包含 author / category / tags 关联数据"""
-        resp = await client.get("/articles/published-one")
+        with patch("app.routers.articles.redis_client") as mock_redis:
+            mock_redis.incr = AsyncMock(return_value=1)
+            mock_redis.get = AsyncMock(return_value="1")
+            resp = await client.get("/articles/published-one")
         data = resp.json()["data"]
         assert data["author"] is not None
         assert data["category"] is not None

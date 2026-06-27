@@ -12,6 +12,12 @@ from app.main import app
 from app.core.database import Base, get_db
 from app.core.security import get_password_hash, create_access_token
 from app.models.user import User, UserRole
+from starlette.middleware.base import BaseHTTPMiddleware
+
+# 测试环境下移除限流中间件，避免跨测试累计计数器或依赖 Redis
+app.user_middleware = [
+    mw for mw in app.user_middleware if mw.cls is not BaseHTTPMiddleware
+]
 
 # in-memory SQLite 是 per-connection 的，不同 session 互不可见
 #     改用临时文件数据库，让所有 session 共享同一份数据 ──
@@ -39,7 +45,7 @@ app.dependency_overrides[get_db] = override_get_db
 
 @pytest.fixture(autouse=True)
 async def reset_db():
-    """每个测试函数前重建所有表，测试后销毁"""
+    """每个测试函数前重建所有表并重置限流计数器，测试后销毁"""
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
