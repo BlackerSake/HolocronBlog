@@ -1,4 +1,9 @@
 services:
+  redis:
+    image: redis:alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
   api:
     build: .
     ports:
@@ -8,6 +13,10 @@ services:
       - SECRET_KEY=${SECRET_KEY:-holocron_secret_key}
       - ALGORITHM=HS256
       - ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - redis
     volumes:
       - ./data:/app/data
 

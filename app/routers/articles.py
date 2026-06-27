@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, get_current_admin_user
 from app.models.user import User, UserRole
@@ -12,7 +12,8 @@ from app.schemas.article import ArticleCreate, ArticleUpdate, ArticleOut, Articl
 from app.schemas.common import Paginated, Response
 from app.services.article_service import slugify, render_markdown
 from app.core.log import log_call
-
+from app.core.redis import redis_client
+import json
 router = APIRouter(prefix="/articles", tags=["Articles"])
 
 
@@ -156,20 +157,62 @@ async def get_backend_article(
     return Response(data=ArticleOut.model_validate(article))
 
 
+@router.get("/hot",response_model=Response[list[ArticleListItem]])
+@log_call
+async def get_hot_articles(db: AsyncSession = Depends(get_db)):
+    """
+    # 获取最火的文章
+    1. 优先尝试从redis 读取缓存
+    2. 缓存没有命中, 查询数据库
+    3. 写入 redis
+    """
+    cache_key = "hot_articles"
+
+    # 1. 尝试从redis 读取缓存
+    cached_articles = await redis_client.get(cache_key)
+    if cached_articles:
+        return Response(data=json.loads(cached_articles))
+
+    # 2. 缓存没有命中, 查询数据库
+    result = await db.execute(
+        select(Article).where(
+            Article.is_published == True,
+            Article.is_deleted == False
+        ).order_by(Article.views.desc()).limit(10)
+        .options(selectinload(Article.author),
+                 selectinload(Article.category),
+                 selectinload(Article.tags))
+    )
+    articles = result.scalars().all()
+    items = [ArticleListItem.model_validate(article) for article in articles]
+
+    # 3. 写入 redis 有效期 5 mins
+    await redis_client.set(cache_key, json.dumps([i.model_dump(mode="json") for i in items]), ex=300)
+    return Response(data=items)
+
 @router.get("/{slug}", response_model=Response[ArticleOut])
 @log_call
 async def get_article(slug: str, db: AsyncSession = Depends(get_db)):
     """
     ## 获取一篇特定文章的内容
-    该文章必须存在且是已发布  
-    避免草稿泄露  
+    该文章必须存在且是已发布
+    避免草稿泄露
+    增加 浏览量计算(redis 原子操作) + 缓存最高浏览量
     """
     article = await _get_article_by_slug(db, slug)
     if not article or not article.is_published: # 防御措施
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail="文章不存在")
-    return Response(data=ArticleOut.model_validate(article))
 
+    # 浏览量计算 + 1
+    views_key = f"article:views:{slug}"
+    await redis_client.incr(views_key)
+
+    # 缓存最高浏览量
+    views = await redis_client.get(views_key)
+    article.views = int(views or 0)
+
+    return Response(data=article)
 
 @router.post("", response_model=Response[ArticleOut])
 @log_call
@@ -205,7 +248,7 @@ async def create_article(
         content_html=html,
         cover_image=article_in.cover_image,
         summary=article_in.summary,
-        is_published=article_in.is_published, #NOTE 暂定默认不发布
+        is_published=article_in.is_published,
         author_id=current_user.id,
         category_id=article_in.category_id,
     )

@@ -50,6 +50,8 @@ class Article(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+    # 浏览量字段
+    views: Mapped[int] = mapped_column(Integer, server_default="0")
 
     # 关联
     author_id: Mapped[int] = mapped_column(ForeignKey("users.id"))

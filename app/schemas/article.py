@@ -40,6 +40,7 @@ class ArticleOut(BaseModel):
     author: UserOut
     category: CategoryOut | None
     tags: list[TagOut] = []
+    views: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 

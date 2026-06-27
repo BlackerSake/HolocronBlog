@@ -11,7 +11,10 @@ from app.api.v1.endpoints import auth, users
 from app.routers import categories, tags
 from app.routers import articles
 from app.core.exceptions import register_exception_handlers
-log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "logs")
+from starlette.middleware.base import BaseHTTPMiddleware
+from app.middleware.rate_limit import rate_limit_middleware
+from app.core.redis import start_sync_task, stop_sync_task, redis_client
+log_dir = os.path.join(os.path.dirname(__file__), "..", "logs")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -26,15 +29,14 @@ async def lifespan(app: FastAPI):
     """FastAPI 生命周期, on_event 方法已经弃用"""
     async with engine.begin() as conn: 
         await conn.run_sync(Base.metadata.create_all)
-    """如果有redis的话,应该这样连接
-    await redis_client.connect()
-    """
+    await start_sync_task()
+
     yield # 应用运行期间
 
-    await engine.dispose() # 关闭数据库连接, 相当于@app.on_event("shutdown")
-    """如果有redis的话,应该这样关闭
     await redis_client.close()
-    """
+    await stop_sync_task()
+    await engine.dispose() # 关闭数据库连接, 相当于@app.on_event("shutdown")
+
 app = FastAPI(
     title = settings.APP_NAME,
     description = settings.APP_DESCRIPTION,
@@ -69,8 +71,8 @@ app.add_middleware(
     allow_methods=["*"], # 允许的请求方法, * 表示所有
     allow_headers=["*"], # 允许的请求头, * 表示所有
     max_age=300, # 浏览器缓存CORS响应的最长时间, s
-
 )
+app.add_middleware(BaseHTTPMiddleware, dispatch=rate_limit_middleware)
 
 @app.get("/")
 async def root():

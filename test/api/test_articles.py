@@ -1,6 +1,7 @@
-"""文章 API 集成测试：列表 / 详情 / 创建 / 更新 / 删除 / 取消发布"""
+"""文章 API 集成测试：列表 / 详情 / 创建 / 更新 / 删除 / 取消发布 / 浏览量 / 热门"""
 import pytest
 from httpx import AsyncClient
+from unittest.mock import AsyncMock, patch
 
 
 @pytest.fixture(autouse=True)
@@ -413,3 +414,80 @@ class TestBackendDetail:
             "/articles/backend/detail/no-such", headers=auth_headers,
         )
         assert resp.status_code == 404
+
+
+class TestArticleViews:
+    """GET /articles/{slug} 浏览量（redis incr + 回写）"""
+
+    async def test_view_incremented(
+        self, client: AsyncClient
+    ):
+        """访问文章触发 redis incr，views 字段返回当前值"""
+        with patch("app.routers.articles.redis_client") as mock_redis:
+            mock_redis.incr = AsyncMock(return_value=5)
+            mock_redis.get = AsyncMock(return_value="5")
+
+            resp = await client.get("/articles/published-one")
+
+        assert resp.status_code == 200
+        assert resp.json()["data"]["views"] == 5
+        mock_redis.incr.assert_awaited_once_with("article:views:published-one")
+
+
+class TestHotArticles:
+    """GET /articles/hot"""
+
+    @pytest.fixture(autouse=True)
+    async def _hot_article(self, db_session, test_user):
+        """hot 测试专用：创建一条高浏览量已发布文章"""
+        from app.models.article import Article
+        article = Article(
+            title="Hot Article",
+            slug="hot-article",
+            content="# Hot",
+            content_html="<h1>Hot</h1>",
+            summary="top article",
+            is_published=True,
+            author_id=test_user.id,
+            views=100,
+        )
+        db_session.add(article)
+        await db_session.commit()
+
+    async def test_hot_returns_list_when_cache_miss(
+        self, client: AsyncClient
+    ):
+        """redis 无缓存 -> 查询 DB 返回热门文章"""
+        with patch("app.routers.articles.redis_client") as mock_redis:
+            mock_redis.get = AsyncMock(return_value=None)
+
+            resp = await client.get("/articles/hot")
+
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert isinstance(data, list)
+        assert len(data) > 0
+
+    async def test_hot_returns_cached_when_cache_hit(
+        self, client: AsyncClient
+    ):
+        """redis 有缓存 -> 直接返回缓存"""
+        cached = '[{"id":99,"title":"cached","slug":"cached","summary":"s","is_published":true,"created_at":"2026-01-01T00:00:00Z","updated_at":null,"author":{"id":1,"username":"testuser","role":"user","email":"testuser@example.com","is_active":true,"created_at":"2026-01-01T00:00:00Z"},"category":null,"tags":[],"cover_image":null}]'
+        with patch("app.routers.articles.redis_client") as mock_redis:
+            mock_redis.get = AsyncMock(return_value=cached)
+
+            resp = await client.get("/articles/hot")
+
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert len(data) == 1
+        assert data[0]["title"] == "cached"
+
+    async def test_hot_requires_no_auth(self, client: AsyncClient):
+        """不需要认证"""
+        with patch("app.routers.articles.redis_client") as mock_redis:
+            mock_redis.get = AsyncMock(return_value=None)
+
+            resp = await client.get("/articles/hot")
+
+        assert resp.status_code == 200
