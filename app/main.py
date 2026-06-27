@@ -11,17 +11,16 @@ from app.api.v1.endpoints import auth, users
 from app.routers import categories, tags
 from app.routers import articles
 from app.core.exceptions import register_exception_handlers
-log_dir = "/Alpha/College_new/HolocronBlog/logs"
-if not os.path.exists(log_dir):
-    os.makedirs(log_dir)
+log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "logs")
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler("logs/app.log"),
-        logging.StreamHandler() # 控制台输出
-    ])
+        logging.FileHandler(os.path.join(log_dir, "app.log")),
+        logging.StreamHandler()
+    ]
+)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI 生命周期, on_event 方法已经弃用"""
