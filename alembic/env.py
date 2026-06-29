@@ -10,12 +10,16 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from app.core.config import settings
 from app.core.database import Base as ModelsBase
-from app.models import User
+from app.models import User, Category, Tag, Article
 
 
 
-# 从 settings 获取同步 URL（将 'sqlite+aiosqlite://' 替换为 'sqlite://'）
-sync_db_url = settings.DATABASE_URL.replace("sqlite+aiosqlite://", "sqlite://")
+# 将异步驱动 URL 转为 Alembic 可用的同步 URL
+sync_db_url = (
+    settings.DATABASE_URL
+    .replace("sqlite+aiosqlite://", "sqlite://")
+    .replace("postgresql+asyncpg://", "postgresql://")
+)
 
 
 # this is the Alembic Config object, which provides

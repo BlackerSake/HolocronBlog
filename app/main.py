@@ -8,7 +8,7 @@ from sqlalchemy import select
 import logging
 import os
 from app.api.v1.endpoints import auth, users
-from app.routers import categories, tags
+from app.routers import categories, comments, tags
 from app.routers import articles
 from app.core.exceptions import register_exception_handlers
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -54,7 +54,7 @@ app.include_router(users.router,
 app.include_router(categories.router)
 app.include_router(tags.router)
 app.include_router(articles.router)
-
+app.include_router(comments.router)
 
 
 
