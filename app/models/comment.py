@@ -2,8 +2,9 @@
 
 from datetime import datetime, timezone
 from sqlalchemy import Text, ForeignKey, Boolean, DateTime
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
+from app.models.user import User
 
 class Comment(Base):
     __tablename__ = "comments"
@@ -23,9 +24,10 @@ class Comment(Base):
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
+
     # 发布后不可编辑
     
-
+    author: Mapped["User"] = relationship()
 
 
 

@@ -130,3 +130,100 @@ def pytest_sessionfinish(session: pytest.Session):
     """全部测试结束后清理临时数据库文件"""
     if os.path.exists(_test_db_path):
         os.unlink(_test_db_path)
+
+
+from app.models.article import Article
+from app.models.category import Category
+from app.models.comment import Comment
+
+
+@pytest_asyncio.fixture
+async def other_user(db_session: AsyncSession) -> User:
+    user = User(
+        username="otheruser",
+        email="other@example.com",
+        password=get_password_hash("otherpass123"),
+        role=UserRole.USER.value,
+        is_active=True,
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture
+async def other_auth_headers(other_user: User) -> dict[str, str]:
+    token = create_access_token(data={"sub": other_user.username})
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest_asyncio.fixture
+async def category(db_session: AsyncSession) -> Category:
+    cat = Category(name="tech", description="tech category")
+    db_session.add(cat)
+    await db_session.commit()
+    await db_session.refresh(cat)
+    return cat
+
+
+@pytest_asyncio.fixture
+async def published_article(db_session, test_user, category):
+    article = Article(
+        title="Published",
+        slug="published-article",
+        content="# Hello",
+        content_html="<h1>Hello</h1>",
+        summary="summary",
+        is_published=True,
+        author_id=test_user.id,
+        category_id=category.id,
+    )
+    db_session.add(article)
+    await db_session.commit()
+    await db_session.refresh(article)
+    return article
+
+
+@pytest_asyncio.fixture
+async def draft_article(db_session, test_user, category):
+    article = Article(
+        title="Draft",
+        slug="draft-article",
+        content="# Draft",
+        content_html="<h1>Draft</h1>",
+        summary="draft",
+        is_published=False,
+        author_id=test_user.id,
+        category_id=category.id,
+    )
+    db_session.add(article)
+    await db_session.commit()
+    await db_session.refresh(article)
+    return article
+
+
+@pytest_asyncio.fixture
+async def existing_comment(db_session, published_article, test_user):
+    comment = Comment(
+        content="existing comment",
+        article_id=published_article.id,
+        author_id=test_user.id,
+    )
+    db_session.add(comment)
+    await db_session.commit()
+    await db_session.refresh(comment)
+    return comment
+
+
+@pytest_asyncio.fixture
+async def other_user_comment(db_session, published_article, other_user):
+    comment = Comment(
+        content="other user's comment",
+        article_id=published_article.id,
+        author_id=other_user.id,
+    )
+    db_session.add(comment)
+    await db_session.commit()
+    await db_session.refresh(comment)
+    return comment

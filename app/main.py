@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import logging
 import os
-from app.api.v1.endpoints import auth, users
+from app.api.v1.endpoints import auth
 from app.routers import categories, comments, tags
 from app.routers import articles
 from app.core.exceptions import register_exception_handlers
@@ -48,9 +48,6 @@ register_exception_handlers(app)
 app.include_router(auth.router,
                    prefix="/api/v1",
                    tags=["Authentication"])
-app.include_router(users.router, 
-                   prefix="/api/v1/users", 
-                   tags=["Users"])
 app.include_router(categories.router)
 app.include_router(tags.router)
 app.include_router(articles.router)

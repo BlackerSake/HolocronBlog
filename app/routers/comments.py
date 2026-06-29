@@ -14,7 +14,7 @@ router  = APIRouter()
     "/articles/{slug}/comments",
     response_model=CommentOut,
     status_code=status.HTTP_201_CREATED)
-async def create_comment(
+async def create_comment_post(
     slug: str,
     comment: CommentCreate,
     user: User = Depends(get_current_user),
@@ -67,7 +67,7 @@ async def list_comments(
             detail="文章不存在"
         )
     comments = await get_article_comments(db=db, article_id=article.id)
-    tree = await build_comment_tree(comments)    
+    tree = build_comment_tree(comments)    
     return tree
 
 @router.delete(

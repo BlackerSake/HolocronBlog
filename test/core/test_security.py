@@ -8,7 +8,6 @@ from app.core.security import (
 )
 from app.core.config import settings
 
-#NOTE 确认密码以及密码哈希
 class TestPasswordHashing:
     def test_corrent_password_and_pass(self):
         """测试 密码正确并通过"""

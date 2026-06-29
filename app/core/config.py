@@ -4,7 +4,7 @@ class Settings(BaseSettings):
     # 应用的基本信息
     APP_NAME: str = "Holocron Blog"
     APP_DESCRIPTION: str = "This is my blog (config)"
-    APP_VERSION: str = "0.4.0"
+    APP_VERSION: str = "0.5.0"
 
     # 数据库信息，本地默认 SQLite
     DATABASE_URL: str = "sqlite+aiosqlite:///./holocron.db"

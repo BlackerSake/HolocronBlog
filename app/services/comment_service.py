@@ -59,7 +59,7 @@ async def create_comment(db: AsyncSession,
         return comment
 
             
-async def build_comment_tree(comments: list[Comment]) -> list[CommentOut]:
+def build_comment_tree(comments: list[Comment]) -> list[CommentOut]:
     """
     ## 将扁平的评论列表组装成树形结构
 
@@ -87,7 +87,7 @@ async def soft_delete_comment(
           db: AsyncSession,
           comment_id: int,
           user_id: int,
-          user_role: str
+          user_role: str,
           ) -> Comment:
     """
     ## 软删除评论
@@ -97,6 +97,7 @@ async def soft_delete_comment(
     """
     # 1. 获取评论
     comment = await db.get(Comment, comment_id)
+    
     if not comment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -107,7 +108,9 @@ async def soft_delete_comment(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="评论已删除"
         )
-    if comment.author_id != user_id and user_role != "admin":
+    article_id = comment.article_id
+    article = await db.get(Article, article_id)
+    if user_id != comment.author_id and user_role != "admin" and article.author_id != user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="无权限删除该评论"
