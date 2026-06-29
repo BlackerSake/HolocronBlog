@@ -17,6 +17,8 @@
     </div>
 
     <div class="markdown-body animate-in animate-in-d1" v-html="article.content_html"></div>
+
+    <CommentSection :slug="route.params.slug" />
   </div>
 
   <div v-else-if="loading" class="loading">加载中<span class="dots"><span>.</span><span>.</span><span>.</span></span></div>
@@ -29,6 +31,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { articlesAPI } from '../api/index.js'
+import CommentSection from '../components/CommentSection.vue'
 
 const route = useRoute()
 const article = ref(null)
@@ -36,7 +39,7 @@ const loading = ref(true)
 
 function formatDate(d) {
   if (!d) return ''
-  return new Date(d).toLocaleDateString('zh-CN', {
+  return new Date(d).toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai',
     year: 'numeric', month: 'long', day: 'numeric'
   })
 }

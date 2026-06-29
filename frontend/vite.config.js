@@ -7,9 +7,14 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': { target: 'http://127.0.0.1:8848', changeOrigin: true },
-      '/articles': { target: 'http://127.0.0.1:8848', changeOrigin: true },
+      '/articles': {
+        target: 'http://127.0.0.1:8848',
+        changeOrigin: true,
+        bypass: req => req.headers.accept?.includes('text/html') ? '/index.html' : undefined
+      },
       '/categories': { target: 'http://127.0.0.1:8848', changeOrigin: true },
       '/tags': { target: 'http://127.0.0.1:8848', changeOrigin: true },
+      '/comments': { target: 'http://127.0.0.1:8848', changeOrigin: true },
     }
   }
 })

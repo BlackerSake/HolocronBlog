@@ -7,6 +7,7 @@ from app.models.article import Article
 from app.models.comment import Comment
 from app.schemas.comment import CommentOut
 
+
 async def create_comment(db: AsyncSession, 
                    article_id: int, 
                    author_id: int, 
@@ -58,7 +59,6 @@ async def create_comment(db: AsyncSession,
 
         return comment
 
-            
 def build_comment_tree(comments: list[Comment]) -> list[CommentOut]:
     """
     ## 将扁平的评论列表组装成树形结构

@@ -61,7 +61,7 @@ class TestListComments:
             headers=auth_headers,
         )
         assert resp.status_code == 200
-        assert resp.json() == []
+        assert resp.json()["data"] == []
     
     async def test_list_comments_with_comments(self, client, auth_headers, published_article, existing_comment):
         """文章有评论 -> 返回评论列表"""
@@ -70,7 +70,7 @@ class TestListComments:
             headers=auth_headers,
         )
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()["data"]
         assert data[0]["content"] == "existing comment"
         assert data[0]["id"] == existing_comment.id
 

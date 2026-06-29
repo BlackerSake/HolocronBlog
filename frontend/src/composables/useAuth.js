@@ -6,6 +6,11 @@ const state = reactive({
   user: JSON.parse(localStorage.getItem('user') || 'null'),
 })
 
+function decodeToken(token) {
+  try { return JSON.parse(atob(token.split('.')[1])) }
+  catch { return null }
+}
+
 export function useAuth() {
   function save(token, user) {
     state.token = token
@@ -16,8 +21,8 @@ export function useAuth() {
 
   async function login(username, password) {
     const data = await authAPI.login(username, password)
-    save(data.access_token, { username })
-    await fetchUser()
+    const payload = decodeToken(data.access_token)
+    save(data.access_token, { username: payload?.sub || username })
     return data
   }
 
@@ -26,10 +31,7 @@ export function useAuth() {
   }
 
   async function fetchUser() {
-    if (!state.token) return null
-    const user = await authAPI.me()
-    save(state.token, user)
-    return user
+    return state.user
   }
 
   function logout() {

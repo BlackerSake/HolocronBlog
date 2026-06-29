@@ -1,22 +1,26 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.article import Article
+from app.models.comment import Comment
 from app.models.user import User
+from app.schemas.common import Response
 from app.schemas.comment import CommentOut, CommentCreate
 from app.services.comment_service import build_comment_tree, create_comment, get_article_comments, soft_delete_comment
-
+from app.core.log import log_call
 router  = APIRouter()
 
+@log_call
 @router.post(
     "/articles/{slug}/comments",
-    response_model=CommentOut,
+    response_model=Response[CommentOut],
     status_code=status.HTTP_201_CREATED)
 async def create_comment_post(
     slug: str,
-    comment: CommentCreate,
+    comment_in: CommentCreate,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -39,14 +43,20 @@ async def create_comment_post(
         db=db,
         article_id=article.id,
         author_id=user.id,
-        content=comment.content,
-        parent_id=comment.parent_id
+        content=comment_in.content,
+        parent_id=comment_in.parent_id
     )
-    return comment
+    result = await db.execute(
+        select(Comment)
+        .where(Comment.id == comment.id)
+        .options(joinedload(Comment.author))
+    )
+    return Response(data=result.scalar_one())
 
+@log_call
 @router.get(
     "/articles/{slug}/comments",
-    response_model=list[CommentOut]
+    response_model=Response[list[CommentOut]]
 )
 async def list_comments(
     slug: str,
@@ -68,8 +78,8 @@ async def list_comments(
         )
     comments = await get_article_comments(db=db, article_id=article.id)
     tree = build_comment_tree(comments)    
-    return tree
-
+    return Response(data=tree)
+@log_call
 @router.delete(
     "/comments/{comment_id}",
     status_code=status.HTTP_204_NO_CONTENT

@@ -39,8 +39,6 @@ export const authAPI = {
   register: data =>
     api.post('/api/v1/register', data).then(unwrap),
 
-  me: () =>
-    api.get('/api/v1/users/me').then(unwrap),
 }
 
 /* ── Articles ── */
@@ -68,6 +66,18 @@ export const articlesAPI = {
 
   delete: slug =>
     api.delete(`/articles/${slug}`),
+}
+
+/* ── Comments ── */
+export const commentsAPI = {
+  list: slug =>
+    api.get(`/articles/${slug}/comments`).then(unwrap),
+
+  create: (slug, data) =>
+    api.post(`/articles/${slug}/comments`, data).then(unwrap),
+
+  delete: id =>
+    api.delete(`/comments/${id}`),
 }
 
 /* ── Categories ── */
