@@ -42,18 +42,13 @@ class TestGetCurrentUser:
         )
         assert resp.status_code == 401
 
-    async def test_disabled_user_returns_403(self, client: AsyncClient, db_session):
+    async def test_disabled_user_returns_403(self, client: AsyncClient, db_session, test_user):
         """已禁用用户 → 403"""
-        from app.models.user import User
-        from sqlalchemy import select
-        result = await db_session.execute(
-            select(User).where(User.username == "testuser")
-        )
-        user = result.scalar_one()
-        user.is_active = False
+
+        test_user.is_active = False
         await db_session.commit()
 
-        token = create_access_token(data={"sub": "testuser"})
+        token = create_access_token(data={"sub": test_user.username})
         resp = await client.get(
             self.URL,
             headers={"Authorization": f"Bearer {token}"},

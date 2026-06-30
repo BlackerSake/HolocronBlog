@@ -42,7 +42,7 @@ const submitting = ref(false)
 async function fetchComments() {
   loading.value = true
   try {
-    comments.value = await commentsAPI.list(props.slug)
+    const raw = await commentsAPI.list(props.slug)
     const map = {}
     function walk(list) {
       for (const c of list) {
@@ -50,7 +50,20 @@ async function fetchComments() {
         if (c.replies) walk(c.replies)
       }
     }
-    walk(comments.value)
+    walk(raw)
+    // 打平：所有嵌套回复铺到第二层
+    for (const c of raw) {
+      const flat = []
+      function collect(list) {
+        for (const r of list) {
+          flat.push({ ...r, replies: [] })
+          if (r.replies) collect(r.replies)
+        }
+      }
+      if (c.replies) collect(c.replies)
+      c.replies = flat
+    }
+    comments.value = raw
     authorMap.value = map
   }
   catch { comments.value = [] }

@@ -33,8 +33,8 @@ class TestCreateComment:
             headers=auth_headers,
         )
         assert resp.status_code == 201
-        assert resp.json()["content"] == "test comment"
-        assert resp.json()["parent_id"] is None
+        assert resp.json()["data"]["content"] == "test comment"
+        assert resp.json()["data"]["parent_id"] is None
 
 
 class TestListComments:

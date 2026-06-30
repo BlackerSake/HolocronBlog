@@ -16,7 +16,7 @@
       </div>
 
       <form v-if="showReply" class="reply-form" @submit.prevent="submitReply">
-        <textarea v-model="replyText" class="comment-input" :placeholder="'回复 @' + comment.author?.username" rows="2" maxlength="2000"
+        <textarea ref="replyInput" v-model="replyText" class="comment-input" :placeholder="'回复 @' + comment.author?.username" rows="2" maxlength="2000"
           @keydown.enter.prevent="submitReply"></textarea>
         <div class="form-actions">
           <span class="hint">Enter 发送</span>
@@ -27,7 +27,7 @@
         </div>
       </form>
 
-      <div v-if="comment.replies?.length" class="reply-list">
+      <div v-if="comment.replies?.length" class="reply-children">
         <CommentItem
           v-for="reply in comment.replies" :key="reply.id"
           :comment="reply" :slug="slug" :depth="depth + 1"
@@ -40,7 +40,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import { commentsAPI } from '../api/index.js'
 import { useAuth } from '../composables/useAuth.js'
 
@@ -57,6 +57,7 @@ const auth = useAuth()
 const replyText = ref('')
 const showReply = ref(false)
 const submitting = ref(false)
+const replyInput = ref(null)
 
 const replyToAuthor = computed(() => {
   if (!props.comment.parent_id) return ''
@@ -72,6 +73,7 @@ const canDelete = computed(() => {
 })
 
 function formatTime(d) {
+  if (!d.endsWith("Z") && !d.includes("+")) d += "Z"
   if (!d) return ''
   const date = new Date(d)
   const now = new Date()
@@ -84,6 +86,7 @@ function formatTime(d) {
 function openReply() {
   showReply.value = true
   replyText.value = ''
+  nextTick(() => replyInput.value?.focus())
 }
 
 function closeReply() { showReply.value = false; replyText.value = '' }
@@ -117,7 +120,7 @@ async function submitReply() {
 .action-btn { background: none; border: none; font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); cursor: pointer; padding: 0; transition: color var(--transition); }
 .action-btn:hover { color: var(--teal); }
 .action-danger:hover { color: var(--danger); }
-.reply-list { margin-top: 0.6rem; padding-left: 0.5rem; border-left: 2px solid var(--border-light); }
+.reply-children { margin-top: 0.6rem; }
 .reply-form { margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.4rem; }
 .comment-input { font-family: var(--font-body); font-size: 0.9rem; width: 100%; padding: 0.65rem 0.85rem; background: var(--bg-surface); border: 1px solid var(--border-light); color: var(--text-primary); border-radius: var(--radius); outline: none; transition: border-color var(--transition), box-shadow var(--transition); resize: vertical; line-height: 1.6; }
 .comment-input:focus { border-color: var(--teal); box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.1); }
