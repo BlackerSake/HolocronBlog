@@ -1,4 +1,6 @@
 from pydantic_settings import BaseSettings
+from zoneinfo import ZoneInfo
+
 
 class Settings(BaseSettings):
     # 应用的基本信息
@@ -27,6 +29,14 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
+    # 时区
+    TIMEZONE: str = "Asia/Shanghai"
+
+    @property
+    def tz(self) -> ZoneInfo:
+        """使用时,获取ZoneInfo 对象"""
+        return ZoneInfo(self.TIMEZONE)
+    
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

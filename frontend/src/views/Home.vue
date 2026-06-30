@@ -154,7 +154,6 @@ function goPage(p) {
 }
 
 function formatDate(d) {
-  if (!d.endsWith("Z") && !d.includes("+")) d += "Z"
   if (!d) return ''
   return new Date(d).toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai',
     year: 'numeric', month: 'short', day: 'numeric'

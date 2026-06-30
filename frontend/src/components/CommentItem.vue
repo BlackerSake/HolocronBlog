@@ -73,7 +73,6 @@ const canDelete = computed(() => {
 })
 
 function formatTime(d) {
-  if (!d.endsWith("Z") && !d.includes("+")) d += "Z"
   if (!d) return ''
   const date = new Date(d)
   const now = new Date()

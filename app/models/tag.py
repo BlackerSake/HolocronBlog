@@ -1,5 +1,6 @@
 from sqlalchemy import String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from app.core.config import settings
 from app.core.database import Base
 from datetime import datetime
 class Tag(Base):
@@ -15,7 +16,7 @@ class Tag(Base):
         nullable=False # 禁止为空
     )
     created_at: Mapped[datetime] = mapped_column(
-        server_default=func.now()
+        default=lambda: datetime.now(settings.tz),
     )
     articles = relationship("Article",
                             secondary="article_tags",

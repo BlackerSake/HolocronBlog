@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from sqlalchemy import String, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from app.core.config import settings
 from app.core.database import Base
 import enum
 
@@ -37,7 +38,7 @@ class User(Base):
         default=True,
     )
     created_at: Mapped[datetime] = mapped_column(
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(settings.tz),
         #使用 lambda 确保每次创建对象时都重新获取当前时间
         # （而不是模型定义时的固定时间）
     )

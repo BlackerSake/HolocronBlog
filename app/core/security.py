@@ -37,10 +37,10 @@ def create_access_token(
     """创建 JWT 访问令牌"""
     to_encode = data.copy() # 创建要编码的数据
     if expires_delta: # 创建过期时间
-        expire = datetime.now(timezone.utc) + expires_delta
+        expire = datetime.now(settings.tz) + expires_delta
     
     else:
-        expire = datetime.now(timezone.utc) + timedelta(
+        expire = datetime.now(settings.tz) + timedelta(
             minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES # 默认过期时间 300s
             ) 
     to_encode.update({"exp": expire}) # 更新数据

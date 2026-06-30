@@ -38,7 +38,6 @@ const article = ref(null)
 const loading = ref(true)
 
 function formatDate(d) {
-  if (!d.endsWith("Z") && !d.includes("+")) d += "Z"
   if (!d) return ''
   return new Date(d).toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai',
     year: 'numeric', month: 'long', day: 'numeric'
