@@ -56,8 +56,8 @@ class TestGetCurrentUser:
         assert resp.status_code == 403
 
 
-class TestGetCurrentAdminUser:
-    """get_current_admin_user 依赖测试"""
+class TestRequirePermission:
+    """require_permission 依赖测试（通过 /categories 验证）"""
 
     async def test_admin_token_allowed(self, client: AsyncClient, admin_headers: dict):
         """管理员 token → 正常访问"""

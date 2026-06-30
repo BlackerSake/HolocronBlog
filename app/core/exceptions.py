@@ -2,50 +2,31 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from pydantic import ValidationError
 from app.schemas.common import ErrorResponse
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-async def http_exception_handler(request: Request, exc: StarletteHTTPException):
-    """处理 FastAPI/Starlette 的 HTTPException（401/403/404等）"""
+def _response(code: int, message: str, detail: str | None = None) -> JSONResponse:
+    return JSONResponse(status_code=code, content=ErrorResponse(code=code, message=message, detail=detail).model_dump())
+
+
+async def http_handler(request: Request, exc: StarletteHTTPException):
     logger.warning("%s %s → %s", request.method, request.url.path, exc.detail)
-    return JSONResponse(
-        status_code=exc.status_code,
-        content=ErrorResponse(
-            code=exc.status_code,
-            message=str(exc.detail),
-            detail=None
-        ).model_dump()
-    )
+    return _response(exc.status_code, str(exc.detail))
 
-async def validation_error_handler(request: Request, exc: RequestValidationError):
-    """处理 Pydantic 请求参数校验错误（422）"""
-    return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-        content=ErrorResponse(
-            code=422,
-            message="Request validation failed",
-            detail=str(exc.errors())
-        ).model_dump()
-    )
 
-async def global_exception_handler(request: Request, exc: Exception):
-    """处理未被上述处理器捕获的异常（500）"""
-    # 生产环境最好记日志
-    return JSONResponse(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content=ErrorResponse(
-            code=500,
-            message="Internal server error",
-            detail=str(exc)
-        ).model_dump()
-    )
+async def validation_handler(request: Request, exc: RequestValidationError):
+    return _response(422, "Request validation failed", detail=str(exc.errors()))
+
+
+async def fallback_handler(request: Request, exc: Exception):
+    logger.exception("%s %s → %s", request.method, request.url.path, exc)
+    return _response(500, "Internal server error")
+
 
 def register_exception_handlers(app: FastAPI):
-    """在 app 实例上注册所有异常处理器"""
-    app.add_exception_handler(StarletteHTTPException, http_exception_handler)
-    app.add_exception_handler(RequestValidationError, validation_error_handler)
-    app.add_exception_handler(Exception, global_exception_handler)
+    app.add_exception_handler(StarletteHTTPException, http_handler)
+    app.add_exception_handler(RequestValidationError, validation_handler)
+    app.add_exception_handler(Exception, fallback_handler)

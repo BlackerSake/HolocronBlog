@@ -63,7 +63,7 @@ class TestCreateAccessToken:
         payload = jwt.decode(
             token,
             settings.SECRET_KEY,
-            algorithms=[settings.ALGORITHM],
+            algorithms=["HS256"],
         )
         assert payload["sub"] == "testuser"
 
@@ -73,7 +73,7 @@ class TestCreateAccessToken:
         payload = jwt.decode(
             token,
             settings.SECRET_KEY,
-            algorithms=[settings.ALGORITHM],
+            algorithms=["HS256"],
         )
         assert "exp" in payload
 
@@ -83,7 +83,7 @@ class TestCreateAccessToken:
         payload = jwt.decode(
             token,
             settings.SECRET_KEY,
-            algorithms=[settings.ALGORITHM],
+            algorithms=["HS256"],
         )
         expire = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
         assert expire > datetime.now(timezone.utc)
@@ -97,7 +97,7 @@ class TestCreateAccessToken:
         payload = jwt.decode(
             token,
             settings.SECRET_KEY,
-            algorithms=[settings.ALGORITHM],
+            algorithms=["HS256"],
         )
         expire = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
         expected = now + delta
@@ -109,7 +109,7 @@ class TestCreateAccessToken:
         payload = jwt.decode(
             token,
             settings.SECRET_KEY,
-            algorithms=[settings.ALGORITHM],
+            algorithms=["HS256"],
         )
         assert payload["sub"] == "user1"
         assert payload["role"] == "admin"
@@ -118,7 +118,7 @@ class TestCreateAccessToken:
         """安全性基本要求：别人拿不到 token 内容"""
         token = create_access_token({"sub": "user1"})
         with pytest.raises(JWTError):
-            jwt.decode(token, "wrong_secret", algorithms=[settings.ALGORITHM])
+            jwt.decode(token, "wrong_secret", algorithms=["HS256"])
 
     def test_decoding_with_wrong_algorithm_fails(self):
         token = create_access_token({"sub": "user1"})

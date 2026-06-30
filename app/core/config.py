@@ -26,7 +26,6 @@ class Settings(BaseSettings):
 
     # JWT 鉴权信息
     SECRET_KEY: str = "holocron_secret_key"
-    ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
     # 时区

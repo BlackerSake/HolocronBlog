@@ -13,9 +13,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import asyncio
 import logging
 from app.core.database import AsyncSessionLocal
-from app.models.user import User, UserRole
+from app.models.user import User
+from app.models.role import Role
 from passlib.context import CryptContext
-from sqlalchemy import select, delete
+from sqlalchemy import select
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -52,10 +53,12 @@ async def create_admin():
                 logger.error(f"删除用户'{username}'失败: {e}")
                 return 
             
+        admin_role = await db.execute(select(Role).where(Role.name == "admin"))
+        admin_role_id = admin_role.scalar_one().id
         hashed = pwd_content.hash(password)
         admin = User(
             username=username,
-            role=UserRole.ADMIN.value,
+            role_id=admin_role_id,
             email=email,
             password=hashed,
             is_active=True,

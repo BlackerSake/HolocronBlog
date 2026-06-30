@@ -2,12 +2,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordRequestForm
 from app.core.database import get_db
-from app.core.security import verify_password, create_access_token
+from app.core.security import verify_password, create_access_token, get_password_hash
 from app.core.log import log_call
 from app.models.user import User
+from app.models.role import Role
 from app.schemas.user import UserCreate, UserOut
 from app.schemas.token import Token
 from app.schemas.common import Response
@@ -19,17 +19,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter() # 路由,用来创建API
-pwd_context = CryptContext(
-    schemes=["bcrypt"],
-    deprecated="auto",
-)
-
-def hash_password(password: str) -> str:
-    """密码加密,哈希值"""
-    # 防御性截断到 72 字节（UTF-8)
-    password_bytes = password.encode("utf-8")[:72]
-
-    return pwd_context.hash(password_bytes)
 
 @router.post("/register",
              response_model=Response[UserOut],
@@ -59,11 +48,18 @@ async def register(user_data: UserCreate,
         logger.error(f"邮箱'{email}'已存在")
         raise HTTPException(status_code=400, detail="邮箱已存在")
 
-    # 创建用户实例(以 ORM 对象)
+    # 创建用户实例(以 ORM 对象)，分配默认角色
+    try:
+        hashed = get_password_hash(user_data.password)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    default_role = await db.execute(select(Role).where(Role.name == "user"))
+    default_role_id = default_role.scalar_one().id
     new_user = User(
         username=user_data.username,
         email=email,
-        password=hash_password(user_data.password),
+        password=hashed,
+        role_id=default_role_id,
     )
 
     # ORM 添加并提交 (⚠️注意: 这里只是内存对象,提交之后才会写入数据库)

@@ -44,6 +44,7 @@ def crud_app():
         prefix="/items",
         tags=["Items"],
         resource_name="item",
+        permission="category:manage",
     )
     app.include_router(router)
     # 复用主 app 注入的 get_db 覆盖，指向测试数据库

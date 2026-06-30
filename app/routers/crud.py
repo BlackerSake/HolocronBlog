@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user, get_current_admin_user
+from app.core.dependencies import get_current_user, require_permission
 from app.models.user import User
 from app.schemas.common import Response
 from app.core.log import log_call
@@ -24,6 +24,7 @@ def create_crud_router(
         prefix: str,
         tags: list[str],
         resource_name: str,
+        permission: str,
 ) -> APIRouter:
     """
     ## 创建通用CRUD路由
@@ -51,7 +52,7 @@ def create_crud_router(
     async def create_item(
         item_in: create_schema, # pyright: ignore[reportInvalidTypeForm]
         db: AsyncSession = Depends(get_db),
-        current_user: User = Depends(get_current_admin_user),
+        current_user: User = Depends(require_permission(permission)),
     ):  
         """
         ## 新建 item
@@ -79,7 +80,7 @@ def create_crud_router(
         item_id: int,
         item_in: update_schema, # pyright: ignore[reportInvalidTypeForm]
         db: AsyncSession = Depends(get_db),
-        current_user: User = Depends(get_current_admin_user),
+        current_user: User = Depends(require_permission(permission)),
     ):
         """
         ## 更新 item
@@ -110,7 +111,7 @@ def create_crud_router(
     async def delete_item(
         item_id: int,
         db: AsyncSession = Depends(get_db),
-        current_user: User = Depends(get_current_admin_user),
+        current_user: User = Depends(require_permission(permission)),
     ):
         """
         ## 删除 item

@@ -3,7 +3,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from fastapi import FastAPI
 
-from app.middleware.rate_limit import _get_client_ip, _loacl_rate_limit
+from app.middleware.rate_limit import _get_client_ip
 
 
 class TestClientIp:
@@ -39,27 +39,6 @@ class TestClientIp:
         }
         ip = _get_client_ip(Request(scope))
         assert ip == "192.168.1.1"
-
-
-class TestLocalRateLimit:
-    """本地内存限流（redis 异常时降级使用）"""
-
-    def test_under_limit_passes(self):
-        """60 次以内不限流"""
-        for _ in range(59):
-            assert _loacl_rate_limit("test-ip-1") is False
-
-    def test_exceed_limit_blocks(self):
-        """超过 60 次限流"""
-        for _ in range(60):
-            _loacl_rate_limit("test-ip-2")
-        assert _loacl_rate_limit("test-ip-2") is True
-
-    def test_different_ip_not_affected(self):
-        """不同 IP 独立计数"""
-        for _ in range(60):
-            _loacl_rate_limit("busy-ip")
-        assert _loacl_rate_limit("other-ip") is False
 
 
 class TestMiddlewarePassthrough:

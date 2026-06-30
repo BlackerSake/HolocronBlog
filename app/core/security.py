@@ -47,7 +47,7 @@ def create_access_token(
     encoded_jwt = jwt.encode(
         to_encode, # 要编码的数据
         settings.SECRET_KEY, # 密钥
-        algorithm=settings.ALGORITHM, # 加密算法 
+        algorithm="HS256", 
     )
     return encoded_jwt
 

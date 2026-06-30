@@ -101,20 +101,20 @@ class TestCreateArticle:
         })
         assert resp.status_code == 401
 
-    async def test_create_with_auth_returns_200(self, client: AsyncClient, auth_headers: dict):
-        """认证用户 -> 200"""
+    async def test_create_with_auth_returns_200(self, client: AsyncClient, admin_headers: dict):
+        """拥有 article:create 权限的用户 -> 200"""
         resp = await client.post("/articles", json={
             "title": "New", "content": "# Hello", "summary": "s",
-        }, headers=auth_headers)
+        }, headers=admin_headers)
         assert resp.status_code == 200
 
     async def test_create_missing_title_returns_422(
-        self, client: AsyncClient, auth_headers: dict
+        self, client: AsyncClient, admin_headers: dict
     ):
         """缺少必填字段 -> 422"""
         resp = await client.post("/articles", json={
             "content": "no title",
-        }, headers=auth_headers)
+        }, headers=admin_headers)
         assert resp.status_code == 422
 
 
@@ -139,12 +139,12 @@ class TestUpdateArticle:
         assert resp.status_code == 403
 
     async def test_update_nonexistent_returns_404(
-        self, client: AsyncClient, auth_headers: dict
+        self, client: AsyncClient, admin_headers: dict
     ):
         """不存在的文章 -> 404"""
         resp = await client.put("/articles/no-such", json={
             "title": "Nope",
-        }, headers=auth_headers)
+        }, headers=admin_headers)
         assert resp.status_code == 404
 
 
@@ -240,15 +240,16 @@ class TestBackendList:
 class TestBackendDetail:
     """GET /articles/backend/detail/{slug}"""
 
-    async def test_requires_auth(self, client: AsyncClient):
-        """未认证 -> 401"""
-        resp = await client.get("/articles/backend/detail/published-one")
-        assert resp.status_code == 401
-
-    async def test_nonexistent_returns_404(self, client: AsyncClient, auth_headers: dict):
+    async def test_nonexistent_returns_404(self, client: AsyncClient):
         """不存在 -> 404"""
-        resp = await client.get("/articles/backend/detail/no-such", headers=auth_headers)
+        resp = await client.get("/articles/backend/detail/no-such")
         assert resp.status_code == 404
+
+    async def test_returns_article(self, client: AsyncClient, published_article):
+        """正常返回文章详情（无需认证）"""
+        resp = await client.get(f"/articles/backend/detail/{published_article.slug}")
+        assert resp.status_code == 200
+        assert resp.json()["data"]["slug"] == published_article.slug
 
 
 class TestArticleViews:

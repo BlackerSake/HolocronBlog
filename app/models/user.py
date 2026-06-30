@@ -1,13 +1,9 @@
 from datetime import datetime, timezone
-from sqlalchemy import String, Boolean
+from sqlalchemy import ForeignKey, String, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.config import settings
 from app.core.database import Base
-import enum
-
-class UserRole(str, enum.Enum):
-    ADMIN = "admin"
-    USER = "user"
+from app.models.role import Role
 
 class User(Base):
     __tablename__ = "users"
@@ -17,12 +13,10 @@ class User(Base):
         String(50),
         unique=True,
         index=True,
-        nullable=False, # 必需项,禁止为空
+        nullable=False,
     )
-    role: Mapped[str] = mapped_column(
-        String(20),
-        default=UserRole.USER.value,
-    )
+    role_id: Mapped[int] = mapped_column(ForeignKey("roles.id"), nullable=False)
+    role_obj: Mapped["Role"] = relationship("Role", lazy="joined")
     email: Mapped[str] = mapped_column(
         String(100),
         unique=True,
@@ -44,4 +38,8 @@ class User(Base):
     )
 
     articles = relationship("Article", back_populates="author")
+
+    @property
+    def role(self) -> str:
+        return self.role_obj.name
 

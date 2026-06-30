@@ -4,6 +4,7 @@
 
 
 import pytest
+from sqlalchemy import select
 from fastapi import HTTPException
 from datetime import datetime
 from types import SimpleNamespace
@@ -26,7 +27,10 @@ from app.models.comment import Comment
 @pytest.fixture
 async def other_user(db_session):
     """测试用例: other_user"""
-    user = User(username="otheruser", password="password", email="other_user@example.com")
+    from app.models.role import Role
+    role = await db_session.execute(select(Role).where(Role.name == "user"))
+    user = User(username="otheruser", password="password", email="other_user@example.com",
+                role_id=role.scalar_one().id)
     db_session.add(user)
     await db_session.commit()
     await db_session.refresh(user)

@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
-from app.core.dependencies import get_current_user, get_current_admin_user
-from app.models.user import User, UserRole
+from app.core.dependencies import get_current_user, require_permission
+from app.models.user import User
+from app.services.permission_service import if_owner_or_permission
 from app.schemas.article import ArticleCreate, ArticleUpdate, ArticleOut, ArticleListItem
 from app.schemas.common import Paginated, Response
 from app.services.article_service import (
@@ -49,7 +50,7 @@ async def list_backend_articles(
     current_user: User = Depends(get_current_user),
 ):
     """后台文章列表，admin 可看所有文章，author 只看自己的文章"""
-    is_admin = current_user.role == UserRole.ADMIN.value
+    is_admin = current_user.role_obj.name == "admin"
     items, total = await query_articles(
         db, page=page, per_page=per_page,
         is_published=True if is_admin else None,
@@ -68,7 +69,6 @@ async def list_backend_articles(
 async def get_backend_article(
     slug: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ):
     """后台文章详情，不限制发布状态，作者可查看自己的草稿"""
     article = await get_article_by_slug(db, slug)
@@ -126,7 +126,7 @@ async def get_article(slug: str, db: AsyncSession = Depends(get_db)):
 async def create_article(
     article_in: ArticleCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("article:create")),
 ):
     """新建文章，默认存为草稿（is_published=False），支持标签关联"""
     article = await svc_create_article(db, article_in, current_user.id)
@@ -140,7 +140,7 @@ async def update_article(
     slug: str,
     article_in: ArticleUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("article:update")),
 ):
     """更新文章，仅作者可操作；传入 is_published=true 即可发布"""
     article = await get_article_by_slug(db, slug)
@@ -164,7 +164,7 @@ async def update_article(
 async def unpublish_article(
     slug: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(require_permission("article:unpublish")),
 ):
     """管理员取消发布文章，将状态切回草稿"""
     article = await get_article_by_slug(db, slug)
@@ -196,7 +196,7 @@ async def delete_article(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail="文章不存在")
 
-    if current_user.id != article.author_id and current_user.role != UserRole.ADMIN.value:
+    if not await if_owner_or_permission(current_user, article.author_id, "article:delete"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="权限不足，只有作者本人或管理员可删除"

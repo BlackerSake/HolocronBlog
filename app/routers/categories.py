@@ -10,4 +10,5 @@ router = create_crud_router(
     prefix="/categories",
     tags=["Categories"],
     resource_name="category",
+    permission="category:manage",
 )

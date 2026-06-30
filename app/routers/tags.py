@@ -10,4 +10,5 @@ router = create_crud_router(
     prefix="/tags",
     tags=["Tags"],
     resource_name="tags",
+    permission="tag:manage",
 )
