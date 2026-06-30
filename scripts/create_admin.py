@@ -53,12 +53,12 @@ async def create_admin():
                 logger.error(f"删除用户'{username}'失败: {e}")
                 return 
             
-        admin_role = await db.execute(select(Role).where(Role.name == "admin"))
-        admin_role_id = admin_role.scalar_one().id
+        admin_role = (await db.execute(select(Role).where(Role.name == "admin"))).scalar_one()
         hashed = pwd_content.hash(password)
         admin = User(
             username=username,
-            role_id=admin_role_id,
+            role=admin_role.name,
+            role_id=admin_role.id,
             email=email,
             password=hashed,
             is_active=True,
@@ -67,6 +67,6 @@ async def create_admin():
         # 添加并提交
         db.add(admin)
         await db.commit()
-        logging.info(f"admin用户'{username}'创建成功")
+        logging.info(f"admin用户'{username}'创建成功,身份'{admin_role.name}'")
 if __name__ == "__main__":
     asyncio.run(create_admin())

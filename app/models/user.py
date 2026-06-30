@@ -15,6 +15,7 @@ class User(Base):
         index=True,
         nullable=False,
     )
+    role: Mapped[str] = mapped_column(String(20), default="user")
     role_id: Mapped[int] = mapped_column(ForeignKey("roles.id"), nullable=False)
     role_obj: Mapped["Role"] = relationship("Role", lazy="joined")
     email: Mapped[str] = mapped_column(
@@ -38,8 +39,4 @@ class User(Base):
     )
 
     articles = relationship("Article", back_populates="author")
-
-    @property
-    def role(self) -> str:
-        return self.role_obj.name
 

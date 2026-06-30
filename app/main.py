@@ -10,6 +10,7 @@ import os
 from app.api.v1.endpoints import auth
 from app.routers import categories, comments, tags
 from app.routers import articles
+from app.routers import admin
 from app.core.exceptions import register_exception_handlers
 from starlette.middleware.base import BaseHTTPMiddleware
 from app.middleware.rate_limit import rate_limit_middleware
@@ -52,6 +53,7 @@ app.include_router(categories.router)
 app.include_router(tags.router)
 app.include_router(articles.router)
 app.include_router(comments.router)
+app.include_router(admin.router)
 
 
 
