@@ -81,6 +81,9 @@ def mock_redis():
     svc.get_cached_permissions = AsyncMock(return_value=None)
     svc.cache_user_permissions = AsyncMock()
     svc.delete_user_permissions = AsyncMock()
+    # 各路由模块在 import 时已拿到原始函数引用，需在自身命名空间也 mock
+    import app.routers.admin as admin_mod
+    admin_mod.delete_user_permissions = AsyncMock()
 
 
 @pytest_asyncio.fixture
