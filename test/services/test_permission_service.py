@@ -17,3 +17,9 @@ async def test_get_admin_permissions(admin_user):
         "upload:create",
         "user:manage", "role:manage",
     }
+
+async  def test_get_cache_permissions(test_user):
+    """测试缓存权限获取 -> 返回用户权限"""
+    permissions = await get_current_user_permissions(test_user)
+    assert "upload:create" in permissions
+

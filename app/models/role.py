@@ -5,7 +5,6 @@ from sqlalchemy import Column, ForeignKey, Integer, String, Table
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.permission import Permission
 from app.core.database import Base
-
 role_permission = Table(
     "role_permission",
     Base.metadata,

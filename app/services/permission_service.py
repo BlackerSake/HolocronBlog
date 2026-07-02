@@ -5,6 +5,8 @@
 
 import json
 
+from sqlalchemy import select
+
 from app.core.database import AsyncSessionLocal
 from app.models.user import User
 from app.core.redis import redis_client

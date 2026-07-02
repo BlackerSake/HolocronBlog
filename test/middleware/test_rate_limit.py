@@ -1,5 +1,6 @@
-"""速率限制中间件测试（本地内存降级路径，redis 不可用时自动 fallback）"""
+"""速率限制中间件测试"""
 import pytest
+from unittest.mock import AsyncMock, patch
 from httpx import ASGITransport, AsyncClient
 from fastapi import FastAPI
 
@@ -65,12 +66,18 @@ class TestMiddlewarePassthrough:
 
     async def test_passthrough(self, client: AsyncClient):
         """正常请求返回 200"""
-        resp = await client.get("/ping")
+        with patch("app.middleware.rate_limit.redis_client") as m:
+            m.incr = AsyncMock(return_value=1)
+            m.ttl = AsyncMock(return_value=55)
+            resp = await client.get("/ping")
         assert resp.status_code == 200
         assert resp.json() == {"ok": True}
 
     async def test_multiple_requests_pass(self, client: AsyncClient):
         """低于限额的多次请求正常通过"""
-        for _ in range(5):
-            resp = await client.get("/ping")
-            assert resp.status_code == 200
+        with patch("app.middleware.rate_limit.redis_client") as m:
+            m.incr = AsyncMock(return_value=1)
+            m.ttl = AsyncMock(return_value=55)
+            for _ in range(5):
+                resp = await client.get("/ping")
+                assert resp.status_code == 200

@@ -22,7 +22,7 @@ class CommentOut(BaseModel):
     id: int
     content: str
 
-    author: UserOut
+    author: UserOut | None = None
     parent_id: int | None
 
     created_at: datetime

@@ -39,5 +39,6 @@ class UserWithRoleList(BaseModel):
 
 class RoleUpdate(BaseModel):
     """修改角色时的输入参数，全量替换权限集合"""
+    id: int 
     name: str | None = None
     permission_ids: list[int] | None = None

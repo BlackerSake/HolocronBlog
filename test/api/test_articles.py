@@ -11,7 +11,7 @@ async def _prepare_data(db_session, test_user):
     from app.models.article import Article
     from app.models.tag import Tag
     from app.models.category import Category
-    cat = Category(name="tech", description="tech")
+    cat = Category(name="api-tech", description="api-tech")
     tag1 = Tag(name="python")
     tag2 = Tag(name="fastapi")
     db_session.add_all([cat, tag1, tag2])

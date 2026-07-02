@@ -2,7 +2,6 @@
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 from app.models.role import Role
 from app.models.user import User
 from app.schemas.admin import RoleOut, UserWithRoleList
@@ -16,11 +15,10 @@ async def query_all_user_role(
     role_name: str | None = None,
     search: str | None = None,
 ) -> tuple[list[UserWithRoleList], int]:
-    """用户列表查询+分页，附带角色信息，返回 (items, total)"""
     query = select(User)
 
     if role_name:
-        query = query.join(Role).where(Role.name == role_name)
+        query = query.join(User.role_obj).where(Role.name == role_name)
     if search:
         query = query.where(or_(
             User.username.ilike(f"%{search}%"),

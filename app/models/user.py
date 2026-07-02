@@ -10,33 +10,23 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     username: Mapped[str] = mapped_column(
-        String(50),
-        unique=True,
-        index=True,
-        nullable=False,
+        String(50), unique=True, index=True, nullable=False,
     )
-    role: Mapped[str] = mapped_column(String(20), default="user")
     role_id: Mapped[int] = mapped_column(ForeignKey("roles.id"), nullable=False)
     role_obj: Mapped["Role"] = relationship("Role", lazy="joined")
     email: Mapped[str] = mapped_column(
-        String(100),
-        unique=True,
-        index=True,
-        nullable=False,
+        String(100), unique=True, index=True, nullable=False,
     )
-    password: Mapped[str] = mapped_column(
-        String(100),
-        nullable=False,
-    ) # 密码存哈希值
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, # 默认值
-        default=True,
-    )
+    password: Mapped[str] = mapped_column(String(100), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
         default=lambda: datetime.now(settings.tz),
-        #使用 lambda 确保每次创建对象时都重新获取当前时间
-        # （而不是模型定义时的固定时间）
     )
 
     articles = relationship("Article", back_populates="author")
+
+    @property
+    def role(self) -> str:
+        """返回角色名称，兼容旧版字符串引用"""
+        return self.role_obj.name if self.role_obj else "user"
 

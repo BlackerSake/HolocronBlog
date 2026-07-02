@@ -1,7 +1,7 @@
+import asyncio
 import tempfile, os
 import pytest
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import (
     create_async_engine,
@@ -12,21 +12,39 @@ from sqlalchemy.ext.asyncio import (
 from unittest.mock import AsyncMock
 from app.main import app
 from app.core.database import Base, get_db
+from starlette.middleware.base import BaseHTTPMiddleware
+
+# 测试环境移除限流中间件，避免跨测试累计计数器或依赖 Redis
+app.user_middleware = [
+    mw for mw in app.user_middleware if mw.cls is not BaseHTTPMiddleware
+]
 from app.core.security import get_password_hash, create_access_token
 from app.models.user import User
 from app.models.role import Role, role_permission
 from app.models.permission import Permission
 from app.core.permissions import ALL_PERMISSIONS, DEFAULT_ROLES
 from app.services.permission_service import get_cached_permissions, cache_user_permissions
-from starlette.middleware.base import BaseHTTPMiddleware
 
-# 测试环境下移除限流中间件，避免跨测试累计计数器或依赖 Redis
-app.user_middleware = [
-    mw for mw in app.user_middleware if mw.cls is not BaseHTTPMiddleware
-]
+# ── 基础设施 ──
 
-# in-memory SQLite 是 per-connection 的，不同 session 互不可见
-#     改用临时文件数据库，让所有 session 共享同一份数据 ──
+@pytest.fixture(scope="session")
+def event_loop():
+    policy = asyncio.get_event_loop_policy()
+    loop = policy.new_event_loop()
+    yield loop
+    loop.close()
+
+
+@pytest_asyncio.fixture
+async def client():
+    from httpx import ASGITransport, AsyncClient
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+
+
+# ── DB ──
+
 _test_db_fd, _test_db_path = tempfile.mkstemp(suffix="_holocron_test.db")
 os.close(_test_db_fd)
 
@@ -41,7 +59,6 @@ TestAsyncSessionLocal = async_sessionmaker(
 
 
 async def override_get_db():
-    """覆盖 app 的 get_db，使用内存数据库会话"""
     async with TestAsyncSessionLocal() as session:
         yield session
 
@@ -51,7 +68,6 @@ app.dependency_overrides[get_db] = override_get_db
 
 @pytest.fixture(autouse=True)
 async def reset_db():
-    """每个测试函数前重建所有表并重置缓存/限流，测试后销毁"""
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
@@ -61,33 +77,21 @@ async def reset_db():
 
 @pytest.fixture(autouse=True)
 def mock_redis():
-    """在测试环境中禁用 Redis 缓存，避免跨测试事件循环冲突"""
     import app.services.permission_service as svc
     svc.get_cached_permissions = AsyncMock(return_value=None)
     svc.cache_user_permissions = AsyncMock()
 
 
 @pytest_asyncio.fixture
-async def client():
-    """用 AsyncClient 模拟客户端，指向 FastAPI 应用"""
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
-
-
-@pytest_asyncio.fixture
 async def db_session():
-    """提供直接的测试数据库会话，用于数据准备"""
     async with TestAsyncSessionLocal() as session:
         yield session
 
 
-# 用户 fixtures
+# ── 角色 & 权限 ──
 
 @pytest_asyncio.fixture(autouse=True)
 async def seed_roles(db_session: AsyncSession):
-    """每个测试前确保默认角色与权限存在"""
-    # 1. 创建所有权限
     perm_map = {}
     for perm_name in ALL_PERMISSIONS:
         existing = await db_session.execute(
@@ -100,7 +104,6 @@ async def seed_roles(db_session: AsyncSession):
         perm_map[perm_name] = perm
     await db_session.commit()
 
-    # 2. 创建角色并关联权限
     for name, cfg in DEFAULT_ROLES.items():
         existing = await db_session.execute(
             select(Role).where(Role.name == name)
@@ -120,9 +123,10 @@ async def seed_roles(db_session: AsyncSession):
     await db_session.commit()
 
 
+# ── 用户 ──
+
 @pytest_asyncio.fixture
 async def test_user(db_session: AsyncSession) -> User:
-    """创建普通测试用户并返回"""
     role = await db_session.execute(select(Role).where(Role.name == "user"))
     user = User(
         username="testuser",
@@ -139,12 +143,27 @@ async def test_user(db_session: AsyncSession) -> User:
 
 @pytest_asyncio.fixture
 async def admin_user(db_session: AsyncSession) -> User:
-    """创建管理员测试用户并返回"""
     role = await db_session.execute(select(Role).where(Role.name == "admin"))
     user = User(
         username="adminuser",
         email="admin@example.com",
         password=get_password_hash("adminpass123"),
+        role_id=role.scalar_one().id,
+        is_active=True,
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture
+async def other_user(db_session: AsyncSession) -> User:
+    role = await db_session.execute(select(Role).where(Role.name == "user"))
+    user = User(
+        username="otheruser",
+        email="other@example.com",
+        password=get_password_hash("otherpass123"),
         role_id=role.scalar_one().id,
         is_active=True,
     )
@@ -177,38 +196,10 @@ async def admin_headers(admin_token: str) -> dict[str, str]:
     """管理员的认证请求头"""
     return {"Authorization": f"Bearer {admin_token}"}
 
+# ── 分类 & 标签 (给 article 用) ──
 
-def pytest_sessionfinish(session: pytest.Session):
-    """全部测试结束后清理临时数据库文件"""
-    if os.path.exists(_test_db_path):
-        os.unlink(_test_db_path)
-
-
-from app.models.article import Article
 from app.models.category import Category
-from app.models.comment import Comment
-
-
-@pytest_asyncio.fixture
-async def other_user(db_session: AsyncSession) -> User:
-    role = await db_session.execute(select(Role).where(Role.name == "user"))
-    user = User(
-        username="otheruser",
-        email="other@example.com",
-        password=get_password_hash("otherpass123"),
-        role_id=role.scalar_one().id,
-        is_active=True,
-    )
-    db_session.add(user)
-    await db_session.commit()
-    await db_session.refresh(user)
-    return user
-
-
-@pytest_asyncio.fixture
-async def other_auth_headers(other_user: User) -> dict[str, str]:
-    token = create_access_token(data={"sub": other_user.username})
-    return {"Authorization": f"Bearer {token}"}
+from app.models.tag import Tag
 
 
 @pytest_asyncio.fixture
@@ -218,6 +209,38 @@ async def category(db_session: AsyncSession) -> Category:
     await db_session.commit()
     await db_session.refresh(cat)
     return cat
+
+
+@pytest_asyncio.fixture
+async def tag(db_session: AsyncSession) -> Tag:
+    t = Tag(name="python")
+    db_session.add(t)
+    await db_session.commit()
+    await db_session.refresh(t)
+    return t
+
+
+# ── 文章 ──
+
+from app.models.article import Article
+
+
+@pytest_asyncio.fixture
+async def article(db_session, test_user, category) -> Article:
+    a = Article(
+        title="Test Article",
+        slug="test-article",
+        content="# Hello",
+        content_html="<h1>Hello</h1>",
+        summary="test",
+        is_published=True,
+        author_id=test_user.id,
+        category_id=category.id,
+    )
+    db_session.add(a)
+    await db_session.commit()
+    await db_session.refresh(a)
+    return a
 
 
 @pytest_asyncio.fixture
@@ -256,6 +279,11 @@ async def draft_article(db_session, test_user, category):
     return article
 
 
+# ── 评论 ──
+
+from app.models.comment import Comment
+
+
 @pytest_asyncio.fixture
 async def existing_comment(db_session, published_article, test_user):
     comment = Comment(
@@ -280,3 +308,25 @@ async def other_user_comment(db_session, published_article, other_user):
     await db_session.commit()
     await db_session.refresh(comment)
     return comment
+
+
+@pytest_asyncio.fixture
+async def deleted_comment(db_session, published_article, test_user):
+    comment = Comment(
+        content="to be deleted",
+        article_id=published_article.id,
+        author_id=test_user.id,
+        is_deleted=True,
+    )
+    db_session.add(comment)
+    await db_session.commit()
+    await db_session.refresh(comment)
+    return comment
+
+
+
+
+def pytest_sessionfinish(session: pytest.Session):
+    """全部测试结束后清理临时数据库文件"""
+    if os.path.exists(_test_db_path):
+        os.unlink(_test_db_path)
