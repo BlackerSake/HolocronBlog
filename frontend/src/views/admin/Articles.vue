@@ -28,7 +28,7 @@
         </thead>
         <tbody>
           <tr v-for="a in filtered" :key="a.id">
-            <td style="color:var(--text-primary);font-weight:500;">{{ a.title }}</td>
+            <td style="color:var(--text-primary);font-weight:500;"><router-link :to="a.is_published ? `/articles/${a.slug}` : `/backend/articles/${a.slug}/edit`" style="color:inherit;text-decoration:none;">{{ a.title }}</router-link></td>
             <td style="font-size:0.82rem;color:var(--text-muted);">#{{ a.author?.id }} {{ a.author?.username }}</td>
             <td>
               <span class="status-badge" :class="a.is_published ? 'status-published' : 'status-draft'">

@@ -9,8 +9,14 @@
         <nav class="header-nav">
           <router-link to="/" class="nav-link">文章</router-link>
           <router-link v-if="auth.token.value" to="/backend" class="nav-link">管理</router-link>
-          <router-link v-if="!auth.token.value" to="/login" class="nav-link login-btn">进入</router-link>
-          <button v-else class="nav-link logout-btn" @click="handleLogout">退出</button>
+          <template v-if="auth.token.value">
+            <div class="header-user-wrap">
+              <div class="header-avatar">{{ auth.user.value?.username?.[0]?.toUpperCase() || '?' }}</div>
+              <span class="header-username">{{ auth.user.value?.username }}</span>
+            </div>
+            <button class="nav-link" @click="handleLogout">退出</button>
+          </template>
+          <router-link v-else to="/login" class="nav-link login-btn">进入</router-link>
         </nav>
       </div>
     </header>

@@ -128,6 +128,36 @@ img { max-width: 100%; height: auto; }
   background: var(--bg-muted);
 }
 
+.header-user-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.2rem 0.5rem 0.2rem 0.2rem;
+  border-radius: 8px;
+  margin: 0 0.25rem;
+}
+
+.header-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: var(--teal);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.header-username {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
 .login-btn {
   border: 1px solid var(--border-light);
   padding: 0.4rem 1rem;
