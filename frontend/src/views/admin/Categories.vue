@@ -50,6 +50,9 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { categoriesAPI } from '../../api/index.js'
+import { formatDate } from '../../utils.js'
+import { useConfirm } from '../../composables/useConfirm.js'
+const dialog = useConfirm()
 
 const categories = ref([])
 const showForm = ref(false)
@@ -57,11 +60,6 @@ const editing = ref(null)
 const form = ref({ name: '', description: '' })
 const saving = ref(false)
 const formError = ref('')
-
-function formatDate(d) {
-  if (!d) return ''
-  return new Date(d).toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: 'short', day: 'numeric' })
-}
 
 function startEdit(cat) {
   editing.value = cat.id
@@ -89,13 +87,11 @@ async function handleSave() {
 }
 
 async function handleDelete(id) {
-  if (!confirm('确定删除此分类？')) return
+  if (!await dialog.confirm('确定删除此分类？')) return
   try {
     await categoriesAPI.delete(id)
     categories.value = categories.value.filter(c => c.id !== id)
-  } catch (e) {
-    alert(e.response?.data?.detail || '删除失败')
-  }
+  } catch (e) { /* handled globally */ }
 }
 
 onMounted(async () => {

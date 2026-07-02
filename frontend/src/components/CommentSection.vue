@@ -29,6 +29,8 @@ import { ref, onMounted } from 'vue'
 import { commentsAPI } from '../api/index.js'
 import { useAuth } from '../composables/useAuth.js'
 import CommentItem from './CommentItem.vue'
+import { useConfirm } from '../composables/useConfirm.js'
+const dialog = useConfirm()
 
 const props = defineProps({ slug: String })
 const auth = useAuth()
@@ -78,14 +80,14 @@ async function submitTopLevel() {
     await commentsAPI.create(props.slug, { content: text })
     newComment.value = ''
     await fetchComments()
-  } catch (e) { alert(e.response?.data?.detail || '评论失败') }
+  } catch (e) { /* handled globally */ }
   finally { submitting.value = false }
 }
 
 async function handleDelete(id) {
-  if (!confirm('确定删除此评论？')) return
+  if (!await dialog.confirm('确定删除此评论？')) return
   try { await commentsAPI.delete(id); await fetchComments() }
-  catch (e) { alert(e.response?.data?.detail || '删除失败') }
+  catch (e) { /* handled globally */ }
 }
 
 onMounted(fetchComments)

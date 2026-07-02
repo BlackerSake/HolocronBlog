@@ -32,17 +32,11 @@ import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { articlesAPI } from '../api/index.js'
 import CommentSection from '../components/CommentSection.vue'
+import { formatDate } from '../utils.js'
 
 const route = useRoute()
 const article = ref(null)
 const loading = ref(true)
-
-function formatDate(d) {
-  if (!d) return ''
-  return new Date(d).toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai',
-    year: 'numeric', month: 'long', day: 'numeric'
-  })
-}
 
 onMounted(async () => {
   try {

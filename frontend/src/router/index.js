@@ -3,6 +3,7 @@ import ArticleDetail from '../views/ArticleDetail.vue'
 import Login from '../views/Login.vue'
 import AdminArticles from '../views/admin/Articles.vue'
 import ArticleEditor from '../views/admin/ArticleEditor.vue'
+import AdminUsers from '../views/admin/AdminUsers.vue'
 import AdminCategories from '../views/admin/Categories.vue'
 import AdminTags from '../views/admin/Tags.vue'
 import AdminLayout from '../views/admin/Layout.vue'
@@ -23,6 +24,7 @@ export const routes = [
       { path: 'articles/:slug/edit', name: 'admin-article-edit', component: ArticleEditor },
       { path: 'categories', name: 'admin-categories', component: AdminCategories, meta: { requiresAdmin: true } },
       { path: 'tags', name: 'admin-tags', component: AdminTags, meta: { requiresAdmin: true } },
+      { path: 'admin', name: 'admin-users', component: AdminUsers, meta: { requiresAdmin: true } },
     ]
   }
 ]
@@ -34,7 +36,6 @@ export async function beforeEach(to, from, next) {
       next({ name: 'login', query: { redirect: to.fullPath } })
       return
     }
-    // token exists, try to load user
     if (!auth.user.value) {
       try {
         await auth.fetchUser()
@@ -44,8 +45,7 @@ export async function beforeEach(to, from, next) {
         return
       }
     }
-    // admin-only routes
-    if (to.meta.requiresAdmin && auth.user?.value?.role !== 'admin') {
+    if (to.meta.requiresAdmin && auth.user?.value?.role_name !== 'admin') {
       next({ name: 'admin-articles' })
       return
     }

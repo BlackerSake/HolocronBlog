@@ -86,6 +86,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { articlesAPI, categoriesAPI, tagsAPI } from '../api/index.js'
+import { formatDate } from '../utils.js'
 
 const articles = ref([])
 const categories = ref([])
@@ -151,13 +152,6 @@ function goPage(p) {
   page.value = p
   fetchArticles()
   window.scrollTo({ top: 0, behavior: 'smooth' })
-}
-
-function formatDate(d) {
-  if (!d) return ''
-  return new Date(d).toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai',
-    year: 'numeric', month: 'short', day: 'numeric'
-  })
 }
 
 onMounted(async () => {

@@ -40,7 +40,7 @@
             <td class="actions">
               <router-link v-if="a.author?.id === user?.id" :to="`/backend/articles/${a.slug}/edit`" class="btn btn-sm">编辑</router-link>
               <button v-if="a.author?.id === user?.id" class="btn btn-sm btn-danger" @click="handleDelete(a)">删除</button>
-              <button v-if="a.author?.id !== user?.id && user?.role === 'admin' && a.is_published" class="btn btn-sm" @click="handleUnpublish(a)">取消发布</button>
+              <button v-if="user?.role_name === 'admin' && a.is_published" class="btn btn-sm" @click="handleUnpublish(a)">取消发布</button>
             </td>
           </tr>
           <tr v-if="!filtered.length">
@@ -56,6 +56,9 @@
 import { ref, computed, onMounted } from 'vue'
 import { articlesAPI } from '../../api/index.js'
 import { useAuth } from '../../composables/useAuth.js'
+import { formatDate } from '../../utils.js'
+import { useConfirm } from '../../composables/useConfirm.js'
+const dialog = useConfirm()
 
 const { user } = useAuth()
 const articles = ref([])
@@ -68,31 +71,20 @@ const filtered = computed(() => {
   return articles.value
 })
 
-function formatDate(d) {
-  if (!d) return ''
-  return new Date(d).toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai',
-    year: 'numeric', month: 'short', day: 'numeric'
-  })
-}
-
 async function handleDelete(article) {
-  if (!confirm(`确定删除「${article.title}」？`)) return
+  if (!await dialog.confirm(`确定删除「${article.title}」？`)) return
   try {
     await articlesAPI.delete(article.slug)
     articles.value = articles.value.filter(a => a.id !== article.id)
-  } catch (e) {
-    alert(e.response?.data?.detail || '删除失败')
-  }
+  } catch (e) { /* handled globally */ }
 }
 
 async function handleUnpublish(article) {
-  if (!confirm(`确定取消发布「${article.title}」？`)) return
+  if (!await dialog.confirm(`确定取消发布「${article.title}」？`)) return
   try {
     await articlesAPI.unpublish(article.slug)
     article.is_published = false
-  } catch (e) {
-    alert(e.response?.data?.detail || '操作失败')
-  }
+  } catch (e) { /* handled globally */ }
 }
 
 onMounted(async () => {

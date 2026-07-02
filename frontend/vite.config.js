@@ -15,6 +15,7 @@ export default defineConfig({
       '/categories': { target: 'http://127.0.0.1:8848', changeOrigin: true },
       '/tags': { target: 'http://127.0.0.1:8848', changeOrigin: true },
       '/comments': { target: 'http://127.0.0.1:8848', changeOrigin: true },
+      '/admin': { target: 'http://127.0.0.1:8848', changeOrigin: true },
     }
   }
 })

@@ -40,6 +40,7 @@ async def query_all_user_role(
             username=u.username,
             email=u.email,
             is_active=u.is_active,
+            created_at=u.created_at,
             role=RoleOut.model_validate(u.role_obj),
         ))
     return items, total

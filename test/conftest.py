@@ -80,6 +80,7 @@ def mock_redis():
     import app.services.permission_service as svc
     svc.get_cached_permissions = AsyncMock(return_value=None)
     svc.cache_user_permissions = AsyncMock()
+    svc.delete_user_permissions = AsyncMock()
 
 
 @pytest_asyncio.fixture

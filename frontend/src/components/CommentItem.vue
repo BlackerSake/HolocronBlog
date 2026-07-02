@@ -69,7 +69,7 @@ const canDelete = computed(() => {
   if (props.comment.is_deleted) return false
   const u = auth.user.value
   if (!u) return false
-  return u.role === 'admin' || props.comment.author?.id === u.id
+  return u.role_name === 'admin' || props.comment.author?.id === u.id
 })
 
 function formatTime(d) {
@@ -99,7 +99,7 @@ async function submitReply() {
     replyText.value = ''
     showReply.value = false
     emit('refresh')
-  } catch (e) { alert(e.response?.data?.detail || '回复失败') }
+  } catch (e) { /* handled globally */ }
   finally { submitting.value = false }
 }
 </script>

@@ -32,6 +32,7 @@ class UserWithRoleList(BaseModel):
     username: str
     email: str
     is_active: bool
+    created_at: datetime
     role: RoleOut
 
     model_config = ConfigDict(from_attributes=True)
@@ -42,3 +43,4 @@ class RoleUpdate(BaseModel):
     id: int 
     name: str | None = None
     permission_ids: list[int] | None = None
+    is_active: bool | None = None

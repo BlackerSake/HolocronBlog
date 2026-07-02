@@ -45,6 +45,9 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { tagsAPI } from '../../api/index.js'
+import { formatDate } from '../../utils.js'
+import { useConfirm } from '../../composables/useConfirm.js'
+const dialog = useConfirm()
 
 const tags = ref([])
 const showForm = ref(false)
@@ -52,11 +55,6 @@ const editing = ref(null)
 const form = ref({ name: '' })
 const saving = ref(false)
 const formError = ref('')
-
-function formatDate(d) {
-  if (!d) return ''
-  return new Date(d).toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: 'short', day: 'numeric' })
-}
 
 function startEdit(tag) {
   editing.value = tag.id
@@ -84,13 +82,11 @@ async function handleSave() {
 }
 
 async function handleDelete(id) {
-  if (!confirm('确定删除此标签？')) return
+  if (!await dialog.confirm('确定删除此标签？')) return
   try {
     await tagsAPI.delete(id)
     tags.value = tags.value.filter(t => t.id !== id)
-  } catch (e) {
-    alert(e.response?.data?.detail || '删除失败')
-  }
+  } catch (e) { /* handled globally */ }
 }
 
 onMounted(async () => {

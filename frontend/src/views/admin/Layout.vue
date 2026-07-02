@@ -1,31 +1,29 @@
 <template>
   <div class="admin-shell">
-    <aside class="admin-sidebar">
-      <div class="sidebar-header">
-        <router-link to="/" class="logo" style="font-size:0.95rem;">
-          <span class="logo-icon">◇</span>
+    <div class="admin-topbar">
+      <div class="topbar-left">
+        <router-link to="/" class="topbar-logo">
+          <span class="logo-icon">H</span>
           <span class="logo-text">管理后台</span>
         </router-link>
+        <nav class="topbar-nav">
+          <router-link to="/backend/articles" class="topbar-link" :class="{ active: $route.path === '/backend' || $route.path.startsWith('/backend/articles') }">文章</router-link>
+          <router-link v-if="auth.user?.value?.role_name === 'admin'" to="/backend/categories" class="topbar-link" :class="{ active: $route.path === '/backend/categories' }">分类</router-link>
+          <router-link v-if="auth.user?.value?.role_name === 'admin'" to="/backend/tags" class="topbar-link" :class="{ active: $route.path === '/backend/tags' }">标签</router-link>
+          <router-link v-if="auth.user?.value?.role_name === 'admin'" to="/backend/admin" class="topbar-link" :class="{ active: $route.path === '/backend/admin' }">用户</router-link>
+        </nav>
       </div>
-      <nav class="sidebar-nav">
-        <router-link to="/backend/articles" class="sidebar-link" :class="{ active: $route.path === '/backend' || $route.path.startsWith('/backend/articles') }">
-          <span class="sl-icon">⊞</span> 文章
-        </router-link>
-        <router-link v-if="auth.user?.value?.role === 'admin'" to="/backend/categories" class="sidebar-link" :class="{ active: $route.path === '/backend/categories' }">
-          <span class="sl-icon">⊡</span> 分类
-        </router-link>
-        <router-link v-if="auth.user?.value?.role === 'admin'" to="/backend/tags" class="sidebar-link" :class="{ active: $route.path === '/backend/tags' }">
-          <span class="sl-icon">#</span> 标签
-        </router-link>
-      </nav>
-      <div class="sidebar-footer">
-        <div class="user-info">
-          <span class="user-name">{{ auth.user?.value?.username }}</span>
-          <span class="user-role">{{ auth.user?.value?.role }}</span>
+      <div class="topbar-right">
+        <div class="topbar-user-wrap">
+          <div class="topbar-avatar">{{ auth.user?.value?.username?.[0]?.toUpperCase() || '?' }}</div>
+          <div class="topbar-user">
+            <span class="un">{{ auth.user?.value?.username }}</span>
+            <span class="rl">{{ auth.user?.value?.role_name === 'admin' ? 'admin' : 'user' }}</span>
+          </div>
         </div>
-        <button class="nav-link logout-btn" @click="handleLogout">退出管理</button>
+        <button class="topbar-btn" @click="handleLogout">退出</button>
       </div>
-    </aside>
+    </div>
     <div class="admin-content">
       <router-view />
     </div>

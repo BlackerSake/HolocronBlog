@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { useToast } from '../composables/useToast.js'
 
 const api = axios.create({ baseURL: '/' })
 
@@ -11,16 +12,21 @@ api.interceptors.request.use(config => {
 api.interceptors.response.use(
   res => res,
   err => {
-    if (err.response?.status === 401 && !err.config.url.includes('/login')) {
+    const detail = err.response?.data?.message || err.response?.data?.detail
+    const status = err.response?.status
+    if (status === 401 && !err.config.url.includes('/login')) {
       localStorage.removeItem('token')
       localStorage.removeItem('user')
       window.location.href = '/login'
+    } else if (status && detail) {
+      useToast().show(`[${status}] ${detail}`)
+    } else if (status) {
+      useToast().show(`[${status}] Request failed`)
     }
     return Promise.reject(err)
   }
 )
 
-// unwrap the standard Response wrapper: { code, message, data }
 function unwrap(res) {
   const body = res.data
   if (body.code && body.code >= 400) throw new Error(body.message || 'Request failed')
@@ -78,6 +84,15 @@ export const commentsAPI = {
 
   delete: id =>
     api.delete(`/comments/${id}`),
+}
+
+/* ── Admin ── */
+export const adminAPI = {
+  listUsers: (params = {}) =>
+    api.get('/admin/users', { params }).then(unwrap),
+
+  updateRole: (userId, data) =>
+    api.put(`/admin/users/${userId}`, data).then(unwrap),
 }
 
 /* ── Categories ── */

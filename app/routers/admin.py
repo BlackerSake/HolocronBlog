@@ -54,8 +54,12 @@ async def update_user_role(
     role = await db.get(Role, body.id)
     if not role:
         raise HTTPException(status_code=404, detail="角色不存在")
+    if user.role_id == 1:
+        raise HTTPException(status_code=400, detail="不可修改管理员的角色")
 
     user.role_id = body.id
+    if body.is_active is not None:
+        user.is_active = body.is_active
     await db.commit()
     await db.refresh(user)
     await delete_user_permissions(user.id)
@@ -65,6 +69,7 @@ async def update_user_role(
         username=user.username,
         email=user.email,
         is_active=user.is_active,
+        created_at=user.created_at,
         role=RoleDetail.model_validate(role),
     ))
 

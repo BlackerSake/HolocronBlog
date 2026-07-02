@@ -68,7 +68,7 @@ async def register(user_data: UserCreate,
     await db.refresh(new_user)
     return Response(data=new_user)
     
-@router.post("/login", response_model=Response[Token])
+@router.post("/login")
 @log_call
 async def login(
     from_data: OAuth2PasswordRequestForm = Depends(),
@@ -104,7 +104,11 @@ async def login(
     access_token = create_access_token(
         data={"sub": user.username}
     )
-    return Response(data=Token(access_token=access_token, token_type="bearer"))
+    return Response(data={
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {"id": user.id, "username": user.username, "role_name": user.role},
+    })
     # bearer : 持有即授权 
     # 服务器不检查客户端身份（比如是不是同一个 IP、同一个设备），
     # 只看 token 本身是否有效。所以谁“持有”（bear）这个 token，谁就能访问资源。
