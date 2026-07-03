@@ -16,6 +16,7 @@ async def test_get_admin_permissions(admin_user):
         "comment:create", "comment:delete",
         "upload:create",
         "user:manage", "role:manage",
+        "broadcast:create",
     }
 
 async  def test_get_cache_permissions(test_user):
