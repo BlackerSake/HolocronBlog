@@ -6,6 +6,7 @@ from sqlalchemy.orm import joinedload
 from app.models.article import Article
 from app.models.comment import Comment
 from app.schemas.comment import CommentOut
+from app.services.notification_service import create_notification
 
 
 async def create_comment(db: AsyncSession, 
@@ -33,6 +34,7 @@ async def create_comment(db: AsyncSession,
             )
         
         # 2. 检验父评论是否存在
+        parent_comment = None
         if parent_id:
             parent_comment = await db.get(Comment, parent_id)
             if parent_comment is None:
@@ -56,6 +58,29 @@ async def create_comment(db: AsyncSession,
         db.add(comment)
         await db.commit()
         await db.refresh(comment)
+
+        if parent_comment:
+            await create_notification(
+                db,
+                initiator_id=author_id,
+                recipient_id=parent_comment.author_id,
+                type="reply_to_comment",
+                content="有人回复了你的评论",
+                article_id=article_id,
+                comment_id=comment.id,
+                preview=content[:256],
+            )
+        else:
+            await create_notification(
+                db,
+                initiator_id=author_id,
+                recipient_id=article.author_id,
+                type="comment_on_article",
+                content="有人评论了你的文章",
+                article_id=article_id,
+                comment_id=comment.id,
+                preview=content[:256],
+            )
 
         return comment
 

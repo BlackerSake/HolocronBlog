@@ -896,3 +896,141 @@ label {
   from { opacity: 0; }
   to { opacity: 1; }
 }
+
+
+/* ── Notifications ── */
+.notification-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.notification-badge {
+  min-width: 1.15rem;
+  height: 1.15rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  line-height: 1.15rem;
+  text-align: center;
+}
+
+.notification-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 2.5rem 0 1.5rem;
+  border-bottom: 1px solid var(--border-light);
+  margin-bottom: 1.5rem;
+}
+
+.notification-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--border-light);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.notification-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 1rem;
+  align-items: start;
+  padding: 1.25rem;
+  background: var(--bg-surface);
+}
+
+.notification-item.unread {
+  background: var(--teal-bg);
+}
+
+.notification-item.clickable {
+  cursor: pointer;
+}
+
+.notification-item.clickable:hover {
+  background: var(--teal-bg);
+  box-shadow: inset 2px 0 0 var(--teal);
+}
+
+.notification-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-top: 0.45rem;
+  border-radius: 999px;
+  background: var(--border-light);
+}
+
+.notification-item.unread .notification-dot {
+  background: var(--teal);
+}
+
+.notification-line,
+.notification-meta {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.notification-type {
+  color: var(--teal);
+  font-weight: 600;
+}
+
+.notification-content {
+  margin: 0.25rem 0;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.notification-preview {
+  margin-bottom: 0.35rem;
+  color: var(--text-secondary);
+  font-size: 0.84rem;
+  line-height: 1.6;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  box-shadow: none;
+}
+
+@media (max-width: 720px) {
+  .header-inner {
+    padding: 0 1rem;
+  }
+
+  .header-nav {
+    gap: 0;
+  }
+
+  .header-username {
+    display: none;
+  }
+
+  .notification-header {
+    flex-direction: column;
+  }
+
+  .notification-item {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .notification-dot {
+    display: none;
+  }
+}

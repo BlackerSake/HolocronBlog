@@ -8,6 +8,10 @@
         </router-link>
         <nav class="topbar-nav">
           <router-link to="/backend/articles" class="topbar-link" :class="{ active: $route.path === '/backend' || $route.path.startsWith('/backend/articles') }">文章</router-link>
+          <router-link to="/notifications" class="topbar-link notification-link">
+            通知
+            <span v-if="unreadCount" class="notification-badge">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
+          </router-link>
           <router-link v-if="auth.user?.value?.role_name === 'admin'" to="/backend/categories" class="topbar-link" :class="{ active: $route.path === '/backend/categories' }">分类</router-link>
           <router-link v-if="auth.user?.value?.role_name === 'admin'" to="/backend/tags" class="topbar-link" :class="{ active: $route.path === '/backend/tags' }">标签</router-link>
           <router-link v-if="auth.user?.value?.role_name === 'admin'" to="/backend/admin" class="topbar-link" :class="{ active: $route.path === '/backend/admin' }">用户</router-link>
@@ -33,12 +37,16 @@
 <script setup>
 import { useRouter } from 'vue-router'
 import { useAuth } from '../../composables/useAuth.js'
+import { useNotifications } from '../../composables/useNotifications.js'
 
 const router = useRouter()
 const auth = useAuth()
+const notifications = useNotifications()
+const unreadCount = notifications.unreadCount
 
 function handleLogout() {
   auth.logout()
+  notifications.reset()
   router.push('/')
 }
 </script>

@@ -24,6 +24,7 @@ class NotificationListItem(BaseModel):
     initiator_id: int
     content: str
     article_id: int | None
+    article_slug: str | None = None
     comment_id: int | None
     preview: str | None
     is_read: bool

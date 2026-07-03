@@ -21,6 +21,7 @@ from app.models.user import User
 from app.models.article import Article
 from app.models.category import Category
 from app.models.comment import Comment
+from app.models.notification import Notification
 
 
 
@@ -226,6 +227,46 @@ class TestCreateComment:
         assert comment.author_id == test_user.id
         assert comment.article_id == published_article.id
         assert comment.parent_id == existing_comment.id
+
+    async def test_comment_on_article_creates_notification(
+        self, db_session, published_article, test_user, other_user
+    ):
+        """评论文章 -> 通知文章作者"""
+        comment = await create_comment(
+            db=db_session,
+            article_id=published_article.id,
+            author_id=other_user.id,
+            content="hello author",
+            parent_id=None,
+        )
+
+        notification = await db_session.scalar(
+            select(Notification).where(Notification.comment_id == comment.id)
+        )
+
+        assert notification.type == "comment_on_article"
+        assert notification.initiator_id == other_user.id
+        assert notification.recipient_id == test_user.id
+
+    async def test_reply_to_comment_creates_notification(
+        self, db_session, published_article, test_user, other_user, existing_comment
+    ):
+        """回复评论 -> 通知父评论作者"""
+        comment = await create_comment(
+            db=db_session,
+            article_id=published_article.id,
+            author_id=other_user.id,
+            content="hello comment",
+            parent_id=existing_comment.id,
+        )
+
+        notification = await db_session.scalar(
+            select(Notification).where(Notification.comment_id == comment.id)
+        )
+
+        assert notification.type == "reply_to_comment"
+        assert notification.initiator_id == other_user.id
+        assert notification.recipient_id == test_user.id
 
 
 class TestSoftDeleteComment:

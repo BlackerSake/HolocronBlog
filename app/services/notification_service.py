@@ -3,6 +3,7 @@
 from sqlalchemy import func, update, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.notification import Notification
+from app.models.article import Article
 
 
 async def create_notification(db: AsyncSession,
@@ -50,15 +51,24 @@ async def get_notifications_list(db: AsyncSession,
         (通知列表, 总条数) 的**元组** 
         不会触发额外查询
     """
-    query = select(Notification).where(Notification.recipient_id == user_id)
+    base_query = select(Notification).where(Notification.recipient_id == user_id)
     total = (await db.execute(
-        select(func.count()).select_from(query.subquery())
+        select(func.count()).select_from(base_query.subquery())
     )).scalar()
 
-    query = query.order_by(Notification.created_at.desc())
-    query = query.offset((page - 1) * per_page).limit(per_page)
+    query = (
+        select(Notification, Article.slug)
+        .outerjoin(Article, Notification.article_id == Article.id)
+        .where(Notification.recipient_id == user_id)
+        .order_by(Notification.created_at.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+    )
     result = await db.execute(query)
-    items = result.scalars().all()
+    items = []
+    for notification, article_slug in result.all():
+        notification.article_slug = article_slug
+        items.append(notification)
 
     return items, total
 

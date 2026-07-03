@@ -63,7 +63,7 @@ class TestCreateNotification:
 
 class TestGetNotificationList:
 
-    async def test_get_notification_list(self, db_session, test_user, other_user):
+    async def test_get_notification_list(self, db_session, test_user, other_user, article):
         """测试获取通知列表"""
         await create_notification(
             db_session,
@@ -71,6 +71,7 @@ class TestGetNotificationList:
             recipient_id=test_user.id,
             type="reply_to_comment",
             content="第一条",
+            article_id=article.id,
         )
         await create_notification(
             db_session,
@@ -85,6 +86,7 @@ class TestGetNotificationList:
         assert total == 1
         assert len(items) == 1
         assert items[0].content == "第一条"
+        assert items[0].article_slug == article.slug
 
     async def test_with_pagination(self, db_session, test_user, other_user):
         """测试分页"""

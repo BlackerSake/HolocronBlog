@@ -1,6 +1,7 @@
 import Home from '../views/Home.vue'
 import ArticleDetail from '../views/ArticleDetail.vue'
 import Login from '../views/Login.vue'
+import Notifications from '../views/Notifications.vue'
 import AdminArticles from '../views/admin/Articles.vue'
 import ArticleEditor from '../views/admin/ArticleEditor.vue'
 import AdminUsers from '../views/admin/AdminUsers.vue'
@@ -13,6 +14,7 @@ export const routes = [
   { path: '/', name: 'home', component: Home },
   { path: '/articles/:slug', name: 'article', component: ArticleDetail },
   { path: '/login', name: 'login', component: Login },
+  { path: '/notifications', name: 'notifications', component: Notifications, meta: { requiresAuth: true } },
   {
     path: '/backend',
     component: AdminLayout,

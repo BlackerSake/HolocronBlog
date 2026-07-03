@@ -8,6 +8,10 @@
         </router-link>
         <nav class="header-nav">
           <router-link to="/" class="nav-link">文章</router-link>
+          <router-link v-if="auth.token.value" to="/notifications" class="nav-link notification-link">
+            通知
+            <span v-if="unreadCount" class="notification-badge">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
+          </router-link>
           <router-link v-if="auth.token.value" to="/backend" class="nav-link">管理</router-link>
           <template v-if="auth.token.value">
             <div class="header-user-wrap">
@@ -46,22 +50,50 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from './composables/useAuth.js'
 import { useToast } from './composables/useToast.js'
 import { useConfirm } from './composables/useConfirm.js'
+import { useNotifications } from './composables/useNotifications.js'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuth()
 const toast = useToast()
 const dialog = useConfirm()
+const notifications = useNotifications()
+const unreadCount = notifications.unreadCount
+let notificationTimer = null
 
 const isAdminRoute = computed(() => route.path.startsWith('/backend'))
 
+function refreshUnreadCount() {
+  if (!auth.token.value) {
+    notifications.reset()
+    return
+  }
+  notifications.fetchUnreadCount().catch(() => {})
+}
+
+function stopNotificationPolling() {
+  if (notificationTimer) clearInterval(notificationTimer)
+  notificationTimer = null
+}
+
+function startNotificationPolling() {
+  stopNotificationPolling()
+  refreshUnreadCount()
+  if (auth.token.value) notificationTimer = setInterval(refreshUnreadCount, 30000)
+}
+
+onMounted(startNotificationPolling)
+watch(auth.token, startNotificationPolling)
+onBeforeUnmount(stopNotificationPolling)
+
 function handleLogout() {
   auth.logout()
+  notifications.reset()
   router.push('/')
 }
 </script>

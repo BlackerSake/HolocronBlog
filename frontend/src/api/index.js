@@ -86,6 +86,22 @@ export const commentsAPI = {
     api.delete(`/comments/${id}`),
 }
 
+
+/* ── Notifications ── */
+export const notificationsAPI = {
+  list: (params = {}) =>
+    api.get('/notifications', { params }).then(unwrap),
+
+  unreadCount: () =>
+    api.get('/notifications/unread_count').then(res => res.data),
+
+  markRead: id =>
+    api.patch(`/notifications/${id}/read`),
+
+  markAllRead: () =>
+    api.patch('/notifications/read-all'),
+}
+
 /* ── Admin ── */
 export const adminAPI = {
   listUsers: (params = {}) =>
