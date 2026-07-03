@@ -4,6 +4,8 @@ __pycache__/
 *.pyo
 *.egg-info/
 
+AGENTS.md
+CLAUDE.md
 # Virtual env
 venv/
 .venv/

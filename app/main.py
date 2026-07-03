@@ -5,16 +5,17 @@ from app.core.database import Base, engine, get_db
 from contextlib import asynccontextmanager
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-import logging
-import os
+import os, logging
 from app.api.v1.endpoints import auth
 from app.routers import categories, comments, tags
 from app.routers import articles
 from app.routers import admin
+from app.routers import notifications
 from app.core.exceptions import register_exception_handlers
 from starlette.middleware.base import BaseHTTPMiddleware
 from app.middleware.rate_limit import rate_limit_middleware
 from app.core.redis import start_sync_task, stop_sync_task, redis_client
+
 log_dir = os.path.join(os.path.dirname(__file__), "..", "logs")
 os.makedirs(log_dir, exist_ok=True)
 
@@ -54,6 +55,7 @@ app.include_router(tags.router)
 app.include_router(articles.router)
 app.include_router(comments.router)
 app.include_router(admin.router)
+app.include_router(notifications.router)
 
 
 

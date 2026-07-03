@@ -20,6 +20,8 @@ ROLE_MANAGE = "role:manage"
 
 UPLOAD_CREATE = "upload:create"
 
+BROADCAST_CREATE = "broadcast:create" # 创建广播
+
 
 
 """定义admin角色权限集合"""
@@ -39,6 +41,8 @@ ALL_PERMISSIONS: set[str] = {
     USER_MANAGE,
     ROLE_MANAGE,
     UPLOAD_CREATE,
+
+    BROADCAST_CREATE,
 }
 
 """定义Author角色 权限集合
