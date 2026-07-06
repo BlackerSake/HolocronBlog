@@ -12,11 +12,11 @@ class Notification(Base):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     type: Mapped[str] = mapped_column(String(255), nullable=False)
 
-    initiator_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    recipient_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    initiator_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    recipient_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
 
-    article_id: Mapped[int | None] = mapped_column(ForeignKey("articles.id"), nullable=True)
-    comment_id: Mapped[int | None] = mapped_column(ForeignKey("comments.id"), nullable=True)
+    article_id: Mapped[int | None] = mapped_column(ForeignKey("articles.id", ondelete="SET NULL"), nullable=True)
+    comment_id: Mapped[int | None] = mapped_column(ForeignKey("comments.id", ondelete="SET NULL"), nullable=True)
 
     content: Mapped[str] = mapped_column(Text, nullable=False)
     preview: Mapped[str | None] = mapped_column(Text)

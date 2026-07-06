@@ -32,23 +32,35 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 def create_access_token(
-        data: dict, 
+        data: dict,
         expires_delta: timedelta | None = None) -> str:
     """创建 JWT 访问令牌"""
     to_encode = data.copy() # 创建要编码的数据
     if expires_delta: # 创建过期时间
         expire = datetime.now(settings.tz) + expires_delta
-    
+
     else:
         expire = datetime.now(settings.tz) + timedelta(
             minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES # 默认过期时间 300s
-            ) 
+            )
     to_encode.update({"exp": expire}) # 更新数据
     encoded_jwt = jwt.encode(
         to_encode, # 要编码的数据
         settings.SECRET_KEY, # 密钥
-        algorithm="HS256", 
+        algorithm="HS256",
     )
     return encoded_jwt
+
+
+def create_refresh_token(username: str) -> str:
+    """创建 JWT 刷新令牌，有效期更长"""
+    expire = datetime.now(settings.tz) + timedelta(
+        days=settings.REFRESH_TOKEN_EXPIRE_DAYS
+    )
+    return jwt.encode(
+        {"sub": username, "purpose": "refresh", "exp": expire},
+        settings.SECRET_KEY,
+        algorithm="HS256",
+    )
 
 

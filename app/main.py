@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.core.database import Base, engine, get_db
+from app.core.database import engine, get_db
 from contextlib import asynccontextmanager
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -29,9 +29,7 @@ logging.basicConfig(
 )
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """FastAPI 生命周期, on_event 方法已经弃用"""
-    async with engine.begin() as conn: 
-        await conn.run_sync(Base.metadata.create_all)
+    """FastAPI 生命周期, 由 Alembic 管理建表"""
     await start_sync_task()
 
     yield # 应用运行期间
@@ -59,12 +57,7 @@ app.include_router(notifications.router)
 
 
 
-origins = [
-    "http://localhost:8848",
-    "https://localhost:8848",
-    "http://127.0.0.1:8848",
-    "https://127.0.0.1:8848"
-]
+origins = settings.cors_origin_list
 
 app.add_middleware(
     CORSMiddleware,

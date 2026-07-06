@@ -107,6 +107,7 @@ class TestLogin:
         assert resp.status_code == 200
         data = resp.json()["data"]
         assert "access_token" in data
+        assert "refresh_token" in data
         assert data["token_type"] == "bearer"
 
     async def test_login_wrong_password(self, client: AsyncClient):
@@ -145,3 +146,36 @@ class TestLogin:
         )
         assert resp.status_code == 401
         assert "未激活" in resp.text
+
+
+class TestRefreshToken:
+    """POST /api/v1/refresh"""
+
+    REFRESH_URL = "/api/v1/refresh"
+
+    @pytest.fixture(autouse=True)
+    async def _setup(self, client: AsyncClient):
+        await client.post("/api/v1/register", json={
+            "username": "refreshtest", "password": "refreshpass123",
+        })
+        resp = await client.post("/api/v1/login", data={
+            "username": "refreshtest", "password": "refreshpass123",
+        })
+        self.refresh_token = resp.json()["data"]["refresh_token"]
+
+    async def test_refresh_success(self, client: AsyncClient):
+        """有效 refresh_token → 200 + 新 tokens"""
+        resp = await client.post(self.REFRESH_URL, json={
+            "refresh_token": self.refresh_token,
+        })
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert "access_token" in data
+        assert "refresh_token" in data
+
+    async def test_refresh_invalid_token(self, client: AsyncClient):
+        """无效 refresh_token → 401"""
+        resp = await client.post(self.REFRESH_URL, json={
+            "refresh_token": "invalid.jwt.token",
+        })
+        assert resp.status_code == 401

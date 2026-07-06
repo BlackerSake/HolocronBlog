@@ -4,12 +4,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi.security import OAuth2PasswordRequestForm
 from app.core.database import get_db
-from app.core.security import verify_password, create_access_token, get_password_hash
+from app.core.config import settings
+from app.core.security import verify_password, create_access_token, create_refresh_token, get_password_hash
 from app.core.log import log_call
 from app.models.user import User
 from app.models.role import Role
 from app.schemas.user import UserCreate, UserOut
-from app.schemas.token import Token
+from app.schemas.token import Token, TokenRefreshRequest
 from app.schemas.common import Response
 from datetime import timedelta
 from jose import JWTError, jwt
@@ -104,14 +105,56 @@ async def login(
     access_token = create_access_token(
         data={"sub": user.username}
     )
+    refresh_token = create_refresh_token(user.username)
     return Response(data={
         "access_token": access_token,
+        "refresh_token": refresh_token,
         "token_type": "bearer",
         "user": {"id": user.id, "username": user.username, "role_name": user.role},
     })
-    # bearer : 持有即授权 
+    # bearer : 持有即授权
     # 服务器不检查客户端身份（比如是不是同一个 IP、同一个设备），
     # 只看 token 本身是否有效。所以谁“持有”（bear）这个 token，谁就能访问资源。
+
+
+@router.post("/refresh")
+@log_call
+async def refresh_token(
+    body: TokenRefreshRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """刷新令牌：用 refresh_token 换新的 access_token + refresh_token"""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="refresh_token 无效或已过期",
+    )
+    try:
+        payload = jwt.decode(
+            body.refresh_token,
+            settings.SECRET_KEY,
+            algorithms=["HS256"],
+        )
+        if payload.get("purpose") != "refresh":
+            raise credentials_exception
+        username: str = payload.get("sub")
+        if not username:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+
+    result = await db.execute(select(User).where(User.username == username))
+    user = result.scalar_one_or_none()
+    if not user or not user.is_active:
+        raise credentials_exception
+
+    access_token = create_access_token(data={"sub": username})
+    refresh_token = create_refresh_token(username)
+    return Response(data={
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "user": {"id": user.id, "username": user.username, "role_name": user.role},
+    })
 
 
 

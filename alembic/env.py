@@ -10,7 +10,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from app.core.config import settings
 from app.core.database import Base as ModelsBase
-from app.models import User, Category, Tag, Article
+import app.models  # noqa: F401 — registers all tables on Base.metadata
 
 
 

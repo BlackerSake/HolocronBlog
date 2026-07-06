@@ -12,8 +12,8 @@ class Comment(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    article_id: Mapped[int] = mapped_column(ForeignKey("articles.id"), nullable=False)
-    author_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    article_id: Mapped[int] = mapped_column(ForeignKey("articles.id", ondelete="CASCADE"), nullable=False)
+    author_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     parent_id: Mapped[int | None] = mapped_column(
         ForeignKey("comments.id", ondelete="SET NULL"), nullable=True)
     # 建表时 `parent_id` 外键的 `ondelete` 策略设为 `SET NULL`

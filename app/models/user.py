@@ -12,7 +12,7 @@ class User(Base):
     username: Mapped[str] = mapped_column(
         String(50), unique=True, index=True, nullable=False,
     )
-    role_id: Mapped[int] = mapped_column(ForeignKey("roles.id"), nullable=False)
+    role_id: Mapped[int] = mapped_column(ForeignKey("roles.id", ondelete="RESTRICT"), nullable=False)
     role_obj: Mapped["Role"] = relationship("Role", lazy="joined")
     email: Mapped[str] = mapped_column(
         String(100), unique=True, index=True, nullable=False,

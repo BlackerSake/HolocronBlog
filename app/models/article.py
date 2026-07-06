@@ -55,8 +55,8 @@ class Article(Base):
     views: Mapped[int] = mapped_column(Integer, server_default="0")
 
     # 关联
-    author_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"))
+    author_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id", ondelete="SET NULL"))
 
     # 一对多关系a,c  与多对多关系: tags
     author = relationship("User", back_populates="articles")

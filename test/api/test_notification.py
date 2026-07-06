@@ -65,7 +65,7 @@ class TestGetUnreadNotificationCount:
         response = await client.get("/notifications/unread_count", headers=admin_headers)
 
         assert response.status_code == 200
-        assert response.json()["count"] == 1
+        assert response.json()["data"]["count"] == 1
 
 
 class TestMarkAllNotificationRead:

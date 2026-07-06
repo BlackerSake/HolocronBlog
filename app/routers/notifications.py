@@ -36,14 +36,14 @@ async def get_notif_list(
 
 
 @log_call
-@router.get("/unread_count", response_model=UnreadNotificationCount)
+@router.get("/unread_count", response_model=Response[UnreadNotificationCount])
 async def get_unread_notification_count(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """获取用户未读通知数量"""
     count = await get_unread_notifications_count(db, user_id=current_user.id)
-    return UnreadNotificationCount(count=count)
+    return Response(data=UnreadNotificationCount(count=count))
 
 
 @log_call
@@ -57,6 +57,7 @@ async def mark_notification_read(
     ok = await mark_notification_is_read(db, notification_id=notification_id, user_id=current_user.id)
     if not ok:
         raise HTTPException(status_code=404, detail="通知不存在")
+    return Response(message="已读")
 
 
 @log_call
@@ -67,3 +68,4 @@ async def mark_all_notification_read(
 ):
     """批量标记所有通知为已读"""
     await mark_all_notification_is_read(db, user_id=current_user.id)
+    return Response(message="标记成功")

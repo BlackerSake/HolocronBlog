@@ -10,12 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.models.user import User
 
-_ALLOWED_ORIGINS = {
-    "http://localhost:8848",
-    "https://localhost:8848",
-    "http://127.0.0.1:8848",
-    "https://127.0.0.1:8848",
-}
+_ALLOWED_ORIGINS = set(settings.cors_origin_list)
 
 
 class ConnectionManager:

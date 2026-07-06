@@ -2,6 +2,9 @@ from pydantic_settings import BaseSettings
 from zoneinfo import ZoneInfo
 
 
+_DEFAULT_SECRET_KEY = "holocron_secret_key"
+
+
 class Settings(BaseSettings):
     # 应用的基本信息
     APP_NAME: str = "Holocron Blog"
@@ -15,7 +18,7 @@ class Settings(BaseSettings):
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
     REDIS_SYNC_INTERVAL: int = 60 * 5
-    
+
     # Railway 注入 postgresql:// → 自动转异步驱动
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -23,10 +26,19 @@ class Settings(BaseSettings):
             self.DATABASE_URL = self.DATABASE_URL.replace(
                 "postgresql://", "postgresql+asyncpg://", 1
             )
+        # 生产环境必须通过环境变量设置 SECRET_KEY
+        if self.DATABASE_URL.startswith("postgresql") and self.SECRET_KEY == _DEFAULT_SECRET_KEY:
+            raise ValueError(
+                "生产环境必须通过环境变量 SECRET_KEY 设置 JWT 密钥，不能使用默认值"
+            )
 
     # JWT 鉴权信息
-    SECRET_KEY: str = "holocron_secret_key"
+    SECRET_KEY: str = _DEFAULT_SECRET_KEY
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+
+    # CORS 允许的来源，逗号分隔；默认本地开发地址
+    CORS_ORIGINS: str = "http://localhost:8848,https://localhost:8848,http://127.0.0.1:8848,https://127.0.0.1:8848"
 
     # 时区
     TIMEZONE: str = "Asia/Shanghai"
@@ -35,7 +47,12 @@ class Settings(BaseSettings):
     def tz(self) -> ZoneInfo:
         """使用时,获取ZoneInfo 对象"""
         return ZoneInfo(self.TIMEZONE)
-    
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        """将逗号分隔的 CORS_ORIGINS 拆成列表"""
+        return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
