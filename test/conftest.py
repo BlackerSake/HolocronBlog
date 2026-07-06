@@ -138,6 +138,7 @@ async def test_user(db_session: AsyncSession) -> User:
         password=get_password_hash("testpass123"),
         role_id=role.scalar_one().id,
         is_active=True,
+        nickname="test",
     )
     db_session.add(user)
     await db_session.commit()

@@ -19,6 +19,12 @@ class User(Base):
     )
     password: Mapped[str] = mapped_column(String(100), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # 个人资料
+    nickname: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    avatar: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    bio: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         default=lambda: datetime.now(settings.tz),
     )
@@ -29,4 +35,3 @@ class User(Base):
     def role(self) -> str:
         """返回角色名称，兼容旧版字符串引用"""
         return self.role_obj.name if self.role_obj else "user"
-

@@ -11,10 +11,12 @@ from app.routers import categories, comments, tags
 from app.routers import articles
 from app.routers import admin
 from app.routers import notifications
+from app.routers import profile
 from app.core.exceptions import register_exception_handlers
 from starlette.middleware.base import BaseHTTPMiddleware
 from app.middleware.rate_limit import rate_limit_middleware
 from app.core.redis import start_sync_task, stop_sync_task, redis_client
+from app.core.seed import seed_default_roles
 
 log_dir = os.path.join(os.path.dirname(__file__), "..", "logs")
 os.makedirs(log_dir, exist_ok=True)
@@ -30,6 +32,7 @@ logging.basicConfig(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI 生命周期, 由 Alembic 管理建表"""
+    await seed_default_roles()
     await start_sync_task()
 
     yield # 应用运行期间
@@ -54,6 +57,7 @@ app.include_router(articles.router)
 app.include_router(comments.router)
 app.include_router(admin.router)
 app.include_router(notifications.router)
+app.include_router(profile.router)
 
 
 
