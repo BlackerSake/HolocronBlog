@@ -25,14 +25,9 @@ pwd_content = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 async def create_admin():
     """创建 admin 用户"""
-    
-
     username = "admin"
     email = "admin@exapmple.com"
     password = "admin"
-
-
-
     async with AsyncSessionLocal() as db:
         # 检查存在与否
         result = await db.execute(

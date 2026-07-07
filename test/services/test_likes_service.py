@@ -8,6 +8,7 @@ from app.services.like_service import (
     get_like_status,
     batch_get_like_status,
     get_the_likers,
+    get_user_history_likes,
 )
 from app.models.article import Article
 from app.models.comment import Comment
@@ -212,3 +213,53 @@ class TestGetTheLikers:
         await change_like_status(db_session, other_user.id, published_article.id, "article")
         likers = await get_the_likers(db_session, published_article.id, "article", limit=1)
         assert len(likers) == 1
+
+
+class TestGetUserHistoryLikes:
+    """get_user_history_likes"""
+
+    async def test_empty_history(self, db_session, test_user):
+        """没有点赞 -> 空列表, total=0"""
+        items, total = await get_user_history_likes(db_session, test_user.id, "article")
+        assert items == []
+        assert total == 0
+
+    async def test_returns_article_likes(self, db_session, published_article, test_user):
+        """点赞文章后 -> 返回记录"""
+        await change_like_status(db_session, test_user.id, published_article.id, "article")
+        items, total = await get_user_history_likes(db_session, test_user.id, "article")
+        assert total == 1
+        assert items[0].target_id == published_article.id
+        assert items[0].target_type == "article"
+
+    async def test_filter_by_target_type(self, db_session, published_article, existing_comment, test_user):
+        """按类型过滤 -> 只返回对应类型的记录"""
+        await change_like_status(db_session, test_user.id, published_article.id, "article")
+        await change_like_status(db_session, test_user.id, existing_comment.id, "comment")
+        items, total = await get_user_history_likes(db_session, test_user.id, "article")
+        assert total == 1
+        assert items[0].target_type == "article"
+
+    async def test_filter_by_user(self, db_session, published_article, test_user, other_user):
+        """用户隔离 -> 只看自己的"""
+        await change_like_status(db_session, test_user.id, published_article.id, "article")
+        await change_like_status(db_session, other_user.id, published_article.id, "article")
+        items, total = await get_user_history_likes(db_session, test_user.id, "article")
+        assert total == 1
+
+    async def test_pagination(self, db_session, published_article, draft_article, test_user):
+        """分页参数生效"""
+        await change_like_status(db_session, test_user.id, published_article.id, "article")
+        await change_like_status(db_session, test_user.id, draft_article.id, "article")
+        items, total = await get_user_history_likes(db_session, test_user.id, "article", page=1, per_page=1)
+        assert total == 2
+        assert len(items) == 1
+
+    async def test_ordered_by_time_desc(self, db_session, published_article, draft_article, test_user):
+        """按时间倒序 -> 最新的在前"""
+        await change_like_status(db_session, test_user.id, draft_article.id, "article")
+        await change_like_status(db_session, test_user.id, published_article.id, "article")
+        items, total = await get_user_history_likes(db_session, test_user.id, "article")
+        assert total == 2
+        assert items[0].target_id == published_article.id
+        assert items[1].target_id == draft_article.id

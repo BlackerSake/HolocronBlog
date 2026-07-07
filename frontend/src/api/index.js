@@ -86,6 +86,36 @@ export const commentsAPI = {
     api.delete(`/comments/${id}`),
 }
 
+/* ── Likes ── */
+export const likesAPI = {
+  toggleArticle: slug =>
+    api.post(`/articles/${slug}/like`).then(res => res.data),
+
+  articleStatus: slug =>
+    api.get(`/articles/${slug}/like-status`).then(res => res.data),
+
+  toggleComment: id =>
+    api.post(`/comments/${id}/like`).then(res => res.data),
+
+  commentStatus: id =>
+    api.get(`/comments/${id}/like-status`).then(res => res.data),
+
+  myHistory: (params = {}) =>
+    api.get('/me/like-history', { params }).then(res => res.data),
+
+  userHistory: (userId, params = {}) =>
+    api.get(`/users/${userId}/like-history`, { params }).then(res => res.data),
+}
+
+/* ── Profile ── */
+export const profileAPI = {
+  get: userId =>
+    api.get(`/api/v1/users/${userId}/profile`).then(unwrap),
+
+  update: data =>
+    api.patch('/api/v1/me/profile', data).then(unwrap),
+}
+
 
 /* ── Notifications ── */
 export const notificationsAPI = {

@@ -14,10 +14,11 @@
           </router-link>
           <router-link v-if="auth.token.value" to="/backend" class="nav-link">管理</router-link>
           <template v-if="auth.token.value">
-            <div class="header-user-wrap">
-              <div class="header-avatar">{{ auth.user.value?.username?.[0]?.toUpperCase() || '?' }}</div>
-              <span class="header-username">{{ auth.user.value?.username }}</span>
-            </div>
+            <router-link to="/me/profile" class="header-user-wrap">
+              <img v-if="auth.user.value?.avatar" class="header-avatar-img" :src="auth.user.value.avatar" alt="" />
+              <div v-else class="header-avatar">{{ (auth.user.value?.nickname || auth.user.value?.username)?.[0]?.toUpperCase() || '?' }}</div>
+              <span class="header-username">{{ auth.user.value?.nickname || auth.user.value?.username }}</span>
+            </router-link>
             <button class="nav-link" @click="handleLogout">退出</button>
           </template>
           <router-link v-else to="/login" class="nav-link login-btn">进入</router-link>

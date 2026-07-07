@@ -94,14 +94,15 @@ onMounted(fetchComments)
 </script>
 
 <style scoped>
-.comment-section { margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-light); }
-.comment-heading { font-family: var(--font-display); font-size: 1.15rem; font-weight: 600; margin-bottom: 1.5rem; }
-.comment-login-hint { text-align: center; padding: 1.5rem; color: var(--text-muted); font-size: 0.88rem; border: 1px solid var(--border-light); border-radius: var(--radius); }
-.comment-form { margin-bottom: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem; }
-.comment-input { font-family: var(--font-body); font-size: 0.9rem; width: 100%; padding: 0.65rem 0.85rem; background: var(--bg-surface); border: 1px solid var(--border-light); color: var(--text-primary); border-radius: var(--radius); outline: none; transition: border-color var(--transition), box-shadow var(--transition); resize: vertical; line-height: 1.6; }
-.comment-input:focus { border-color: var(--teal); box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.1); }
+.comment-section { margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-light); animation: fadeUp 0.36s ease both; }
+.comment-heading { font-family: var(--font-display); font-size: 1.15rem; font-weight: 600; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.55rem; }
+.comment-heading::before { content: ''; width: 0.5rem; height: 0.5rem; border-radius: 999px; background: var(--accent); box-shadow: 0 0 0 5px var(--accent-bg); }
+.comment-login-hint { text-align: center; padding: 1.5rem; color: var(--text-muted); font-size: 0.88rem; border: 1px solid var(--border-light); border-radius: var(--radius); background: rgba(255,255,255,0.68); box-shadow: var(--shadow-sm); }
+.comment-form { margin-bottom: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem; padding: 0.85rem; border: 1px solid rgba(95, 110, 103, 0.12); border-radius: var(--radius); background: rgba(255,255,255,0.72); box-shadow: var(--shadow-sm); }
+.comment-input { font-family: var(--font-body); font-size: 0.9rem; width: 100%; padding: 0.75rem 0.9rem; background: var(--bg-surface); border: 1px solid var(--border-light); color: var(--text-primary); border-radius: var(--radius); outline: none; transition: border-color var(--transition), box-shadow var(--transition), background var(--transition); resize: vertical; line-height: 1.6; }
+.comment-input:focus { border-color: var(--teal); box-shadow: var(--shadow-glow); }
 .form-actions { display: flex; justify-content: space-between; align-items: center; }
 .hint { font-size: 0.68rem; color: var(--text-muted); font-family: var(--font-mono); }
-.comment-empty { text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.88rem; }
+.comment-empty { text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.88rem; border: 1px dashed var(--border-light); border-radius: var(--radius); background: rgba(255,255,255,0.5); }
 .comment-list { display: flex; flex-direction: column; gap: 0.75rem; }
 </style>

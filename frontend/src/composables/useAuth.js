@@ -14,6 +14,11 @@ export function useAuth() {
     localStorage.setItem('user', JSON.stringify(user))
   }
 
+  function updateUser(patch) {
+    state.user = { ...(state.user || {}), ...patch }
+    localStorage.setItem('user', JSON.stringify(state.user))
+  }
+
   async function login(username, password) {
     const data = await authAPI.login(username, password)
     save(data.access_token, data.user || { username })
@@ -35,5 +40,5 @@ export function useAuth() {
     localStorage.removeItem('user')
   }
 
-  return { ...toRefs(state), login, register, fetchUser, logout }
+  return { ...toRefs(state), login, register, fetchUser, logout, updateUser }
 }

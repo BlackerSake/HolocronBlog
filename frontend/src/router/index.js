@@ -2,6 +2,7 @@ import Home from '../views/Home.vue'
 import ArticleDetail from '../views/ArticleDetail.vue'
 import Login from '../views/Login.vue'
 import Notifications from '../views/Notifications.vue'
+import Profile from '../views/Profile.vue'
 import AdminArticles from '../views/admin/Articles.vue'
 import ArticleEditor from '../views/admin/ArticleEditor.vue'
 import AdminUsers from '../views/admin/AdminUsers.vue'
@@ -15,6 +16,8 @@ export const routes = [
   { path: '/articles/:slug', name: 'article', component: ArticleDetail },
   { path: '/login', name: 'login', component: Login },
   { path: '/notifications', name: 'notifications', component: Notifications, meta: { requiresAuth: true } },
+  { path: '/me/profile', name: 'my-profile', component: Profile, meta: { requiresAuth: true } },
+  { path: '/users/:id/profile', name: 'user-profile', component: Profile },
   {
     path: '/backend',
     component: AdminLayout,

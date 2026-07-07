@@ -1,11 +1,12 @@
 
 
 
-from sqlalchemy import select, update
+from sqlalchemy import and_, exists, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.article import Article
 from app.models.comment import Comment
 from app.models.like import Likes
+from app.models.user import User
 
 
 async def _update_target_count(db: AsyncSession,
@@ -36,6 +37,18 @@ async def update_like_count(db: AsyncSession,
     ## 更新点赞的统一入口
     """
     await _update_target_count(db, target_id, target_type, delta)
+
+async def get_comment_by_id(db: AsyncSession, comment_id: int) -> Comment:
+    """
+    ## 根据 ID 查询评论
+    """
+    result = await db.execute(
+        select(Comment).where(Comment.id == comment_id)
+    )
+    comment = result.scalar_one_or_none()
+    if not comment:
+        raise ValueError(f"Comment with id {comment_id} not found")
+    return comment
 
 async def change_like_status(db: AsyncSession,
                              user_id: int,
@@ -137,3 +150,120 @@ async def get_the_likers(db: AsyncSession,
         .limit(limit)
         )
     return result.scalars().all()
+
+async def get_user_history_likes(db: AsyncSession,
+                                user: int,
+                                target_type: str | None = None,
+                                page: int = 1,
+                                per_page: int = 10) -> tuple[list[Likes], int]:
+    """
+    ## 查询自己的的点赞历史
+    按照时间倒序, 分页返回
+    主页展示"我赞过的文章"
+    """
+
+    valid_article = and_(
+        Likes.target_type == "article",
+        exists().where(Article.id == Likes.target_id),
+    )
+    valid_comment = and_(
+        Likes.target_type == "comment",
+        exists().where(Comment.id == Likes.target_id),
+    )
+
+    query = select(Likes).where(Likes.user_id == user)
+    if target_type == "article":
+        query = query.where(valid_article)
+    elif target_type == "comment":
+        query = query.where(valid_comment)
+    else:
+        query = query.where(or_(valid_article, valid_comment))
+    query = query.order_by(Likes.create_at.desc())
+
+    total = await db.execute(
+        select(func.count()).select_from(query.subquery())
+    )
+    total = total.scalar()
+
+    query = query.offset((page - 1) * per_page).limit(per_page)
+    result = await db.execute(query)
+    items = result.scalars().all()
+    return items, total
+
+
+async def enrich_like_history_items(db: AsyncSession,
+                                    items: list[Likes]) -> list[dict]:
+    """
+    ## 为点赞历史记录补充标题和跳转链接
+    返回可直接序列化的 dict 列表
+    """
+    if not items:
+        return []
+
+    article_ids = [item.target_id for item in items if item.target_type == "article"]
+    comment_ids = [item.target_id for item in items if item.target_type == "comment"]
+    article_map = {}
+    comment_map = {}
+
+    if article_ids:
+        rows = await db.execute(
+            select(Article, User)
+            .join(User, Article.author_id == User.id)
+            .where(Article.id.in_(article_ids))
+        )
+        article_map = {article.id: (article, author) for article, author in rows.all()}
+
+    if comment_ids:
+        rows = await db.execute(
+            select(Comment, Article, User)
+            .join(Article, Comment.article_id == Article.id)
+            .join(User, Comment.author_id == User.id)
+            .where(Comment.id.in_(comment_ids))
+        )
+        comment_map = {comment.id: (comment, article, author) for comment, article, author in rows.all()}
+
+    result = []
+    for item in items:
+        base = {
+            "liked_at": item.create_at,
+            "target_type": item.target_type,
+            "target_id": item.target_id,
+        }
+        if item.target_type == "article":
+            row = article_map.get(item.target_id)
+            if not row:
+                continue
+            article, author = row
+            author_name = author.nickname or author.username
+            result.append({
+                **base,
+                "title": article.title,
+                "url": f"/articles/{article.slug}",
+                "article_title": article.title,
+                "article_url": f"/articles/{article.slug}",
+                "comment_content": "",
+                "author_id": author.id,
+                "author_name": author_name,
+                "author_avatar": author.avatar,
+            })
+            continue
+
+        row = comment_map.get(item.target_id)
+        if not row:
+            continue
+        comment, article, author = row
+        author_name = author.nickname or author.username
+        content = "此评论已被删除" if comment.is_deleted else comment.content
+        preview = content[:120] + "…" if len(content) > 120 else content
+        result.append({
+            **base,
+            "title": preview,
+            "url": f"/articles/{article.slug}#comment-{comment.id}",
+            "article_title": article.title,
+            "article_url": f"/articles/{article.slug}",
+            "comment_content": preview,
+            "author_id": author.id,
+            "author_name": author_name,
+            "author_avatar": author.avatar,
+        })
+    return result

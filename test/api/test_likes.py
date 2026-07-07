@@ -120,3 +120,177 @@ class TestLikeStatus:
         )
         assert resp.json()["is_liked"] is False
         assert resp.json()["like_count"] == 1
+
+
+class TestMeLikeHistory:
+    """GET /me/like-history"""
+
+    async def test_without_auth_returns_401(self, client: AsyncClient):
+        """未认证 -> 401"""
+        resp = await client.get("/me/like-history", params={"target_type": "article"})
+        assert resp.status_code == 401
+
+    async def test_empty_history(self, client: AsyncClient, auth_headers):
+        """没有点赞 -> 空列表"""
+        resp = await client.get(
+            "/me/like-history", params={"target_type": "article"}, headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    async def test_returns_history(self, client: AsyncClient, auth_headers, published_article):
+        """点赞后 -> 历史记录存在"""
+        await client.post(
+            f"/articles/{published_article.slug}/like", headers=auth_headers,
+        )
+        resp = await client.get(
+            "/me/like-history", params={"target_type": "article"}, headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["target_id"] == published_article.id
+        assert data[0]["target_type"] == "article"
+        assert data[0]["title"] == published_article.title
+        assert data[0]["url"] == f"/articles/{published_article.slug}"
+        assert "liked_at" in data[0]
+
+    async def test_filter_by_target_type(self, client: AsyncClient, auth_headers, published_article):
+        """按类型过滤 -> 只返回对应类型的记录"""
+        await client.post(
+            f"/articles/{published_article.slug}/like", headers=auth_headers,
+        )
+        resp = await client.get(
+            "/me/like-history", params={"target_type": "comment"}, headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    async def test_returns_comment_history_details(self, client: AsyncClient, auth_headers, published_article, existing_comment, test_user):
+        """评论点赞历史包含评论内容、原文章和作者信息"""
+        await client.post(
+            f"/comments/{existing_comment.id}/like", headers=auth_headers,
+        )
+        resp = await client.get(
+            "/me/like-history", params={"target_type": "comment"}, headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["target_type"] == "comment"
+        assert data[0]["target_id"] == existing_comment.id
+        assert data[0]["comment_content"] == existing_comment.content
+        assert data[0]["article_title"] == published_article.title
+        assert data[0]["article_url"] == f"/articles/{published_article.slug}"
+        assert data[0]["url"] == f"/articles/{published_article.slug}#comment-{existing_comment.id}"
+        assert data[0]["author_id"] == test_user.id
+        assert data[0]["author_name"] == "test"
+
+    async def test_returns_mixed_history_without_type(self, client: AsyncClient, auth_headers, published_article, existing_comment):
+        """不传 target_type -> 返回文章和评论混合历史"""
+        await client.post(
+            f"/articles/{published_article.slug}/like", headers=auth_headers,
+        )
+        await client.post(
+            f"/comments/{existing_comment.id}/like", headers=auth_headers,
+        )
+        resp = await client.get(
+            "/me/like-history", headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert {item["target_type"] for item in data} == {"article", "comment"}
+
+    async def test_history_skips_missing_targets(self, client: AsyncClient, auth_headers, db_session, published_article, test_user):
+        """孤儿点赞记录不应生成空白假历史"""
+        from app.models.like import Likes
+
+        db_session.add(Likes(user_id=test_user.id, target_type="article", target_id=999999))
+        await db_session.commit()
+        await client.post(
+            f"/articles/{published_article.slug}/like", headers=auth_headers,
+        )
+
+        resp = await client.get("/me/like-history", headers=auth_headers)
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["target_id"] == published_article.id
+        assert data[0]["title"] == published_article.title
+
+    async def test_pagination(self, client: AsyncClient, auth_headers, published_article, db_session, test_user, category):
+        """分页参数生效"""
+        from app.models.article import Article
+        a2 = Article(
+            title="Second Published", slug="second-published",
+            content="# 2", content_html="<p>2</p>",
+            summary="second", is_published=True,
+            author_id=test_user.id, category_id=category.id,
+        )
+        db_session.add(a2)
+        await db_session.commit()
+        await db_session.refresh(a2)
+
+        for article in [published_article, a2]:
+            await client.post(
+                f"/articles/{article.slug}/like", headers=auth_headers,
+            )
+        resp = await client.get(
+            "/me/like-history",
+            params={"target_type": "article", "page": 1, "per_page": 1},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        assert len(resp.json()) == 1
+
+
+class TestUsersLikeHistory:
+    """GET /users/{user_id}/like-history"""
+
+    async def test_empty_history(self, client: AsyncClient, test_user):
+        """没有点赞 -> 空列表"""
+        resp = await client.get(
+            f"/users/{test_user.id}/like-history", params={"target_type": "article"},
+        )
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    async def test_returns_users_history(self, client: AsyncClient, auth_headers, published_article, test_user, other_user):
+        """查看其他用户的点赞历史"""
+        from app.core.security import create_access_token
+        other_token = create_access_token(data={"sub": other_user.username})
+        other_headers = {"Authorization": f"Bearer {other_token}"}
+
+        await client.post(
+            f"/articles/{published_article.slug}/like", headers=other_headers,
+        )
+        resp = await client.get(
+            f"/users/{other_user.id}/like-history",
+            params={"target_type": "article"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["target_id"] == published_article.id
+        assert data[0]["title"] == published_article.title
+        assert data[0]["url"] == f"/articles/{published_article.slug}"
+
+    async def test_does_not_require_auth(self, client: AsyncClient, test_user):
+        """不需要认证"""
+        resp = await client.get(
+            f"/users/{test_user.id}/like-history", params={"target_type": "article"},
+        )
+        assert resp.status_code == 200
+
+    async def test_filter_by_type(self, client: AsyncClient, auth_headers, published_article, test_user):
+        """按类型过滤"""
+        await client.post(
+            f"/articles/{published_article.slug}/like", headers=auth_headers,
+        )
+        resp = await client.get(
+            f"/users/{test_user.id}/like-history",
+            params={"target_type": "comment"},
+        )
+        assert resp.status_code == 200
+        assert resp.json() == []

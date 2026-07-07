@@ -3,7 +3,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class LikeUserBrief(BaseModel):
@@ -31,3 +31,19 @@ class LikeStatusOut(BaseModel):
     target_id: int
     like_count: int
     is_liked: bool
+
+class LikeHistoryOut(BaseModel):
+    """点赞记录（含前端展示信息）"""
+    liked_at: datetime
+    target_type: str
+    target_id: int
+    title: str
+    url: str
+    article_title: str
+    article_url: str
+    comment_content: str
+    author_id: int | None = None
+    author_name: str
+    author_avatar: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
