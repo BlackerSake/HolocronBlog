@@ -11,6 +11,7 @@ from app.routers import categories, comments, tags
 from app.routers import articles
 from app.routers import admin
 from app.routers import notifications
+from app.routers import likes
 from app.routers import profile
 from app.core.exceptions import register_exception_handlers
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -58,6 +59,7 @@ app.include_router(comments.router)
 app.include_router(admin.router)
 app.include_router(notifications.router)
 app.include_router(profile.router)
+app.include_router(likes.router)
 
 
 

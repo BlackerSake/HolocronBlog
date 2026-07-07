@@ -53,7 +53,7 @@ class Article(Base):
     )
     # 浏览量字段
     views: Mapped[int] = mapped_column(Integer, server_default="0")
-
+    like_count: Mapped[int] = mapped_column(default=0)
     # 关联
     author_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
     category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id", ondelete="SET NULL"))

@@ -6,3 +6,4 @@ from .comment import Comment
 from .notification import Notification
 from .role import Role
 from .permission import Permission
+from app.models.like import Likes

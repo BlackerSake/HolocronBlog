@@ -24,6 +24,20 @@ def slugify(text: str) -> str:
     text = re.sub(r'[^a-z0-9\u4e00-\u9fff]+', '-', text).strip('-')
     return text or 'untitled'
 
+async def get_published_article_by_slug(db: AsyncSession, slug: str) -> Article | None:
+    """根据slug获取一篇已发布的未删除文章"""
+    result = await db.execute(
+        select(Article)
+        .where(Article.slug == slug,
+               Article.is_deleted == False,
+               Article.is_published == True)
+        .options(
+            selectinload(Article.author),
+            selectinload(Article.category),
+            selectinload(Article.tags),
+        )
+    )
+    return result.scalar_one_or_none()
 
 async def get_article_by_slug(
         db: AsyncSession,

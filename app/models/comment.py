@@ -30,5 +30,5 @@ class Comment(Base):
     
     author: Mapped["User"] = relationship()
 
-
+    like_count: Mapped[int] = mapped_column(default=0)
 
