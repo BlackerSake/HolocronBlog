@@ -1,5 +1,6 @@
 import asyncio
-
+from typing import cast
+import logging
 from sqlalchemy import and_, exists, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.redis import redis_client
@@ -7,6 +8,9 @@ from app.models.article import Article
 from app.models.comment import Comment
 from app.models.like import Likes
 from app.models.user import User
+from app.core.like_stream import append_like_event
+
+logger = logging.getLogger(__name__)
 
 _TOGGLE_LIKE_LUA = """
 local liked = redis.call("SISMEMBER", KEYS[1], ARGV[1])
@@ -109,7 +113,9 @@ async def _set_like_status_in_db(db: AsyncSession,
                                  user_id: int,
                                  target_id: int,
                                  target_type: str,
-                                 is_liked: bool) -> None:
+                                 is_liked: bool,
+                                 *,
+                                 commit:bool = True) -> None:
     """
     ## 将点赞状态持久化写入db(幂等db写入)
     所谓幂等性:对同一个请求,重复执行多次操作,产生同样的结果
@@ -131,20 +137,19 @@ async def _set_like_status_in_db(db: AsyncSession,
         )
     )
     like = existing.scalar_one_or_none()
-
+    changed = False
     if is_liked:
-        if like:
-            return
-        db.add(Likes(user_id=user_id, target_id=target_id, target_type=target_type))
-        await update_like_count(db, target_id, target_type, 1)
+        if not like:
+            db.add(Likes(user_id=user_id, target_id=target_id, target_type=target_type))
+            await update_like_count(db, target_id, target_type, 1)
+            changed = True
+    else:
+        if like:       
+            await db.delete(like)
+            await update_like_count(db, target_id, target_type, -1)
+            changed = True
+    if commit and changed:
         await db.commit()
-        return
-
-    if not like:
-        return
-    await db.delete(like)
-    await update_like_count(db, target_id, target_type, -1)
-    await db.commit()
 
 
 async def _update_target_count(db: AsyncSession,
@@ -253,9 +258,14 @@ async def change_like_status_cached(db: AsyncSession,
 
     try:
         # TODO 持久化写入数据库；第2阶段用 Redis Stream 替换
-        await _set_like_status_in_db(db, user_id, target_id, target_type, is_liked)
+        await append_like_event(user_id, target_id, target_type, is_liked)
     except Exception:
-        await db.rollback()
+        logger.exception("点赞状态持久化写入数据库失败,降级为db写入")
+        try: 
+            await _set_like_status_in_db(db, user_id, target_id, target_type, is_liked)
+        except Exception:
+            await db.rollback()
+            logger.exception("点赞状态持久化降级写db失败")
 
     return {
         "target_id": target_id,
@@ -352,7 +362,7 @@ async def get_the_likers(db: AsyncSession,
         .order_by(Likes.create_at.desc())
         .limit(limit)
         )
-    return result.scalars().all()
+    return list(result.scalars().all())
 
 async def get_user_history_likes(db: AsyncSession,
                                 user: int,
@@ -386,11 +396,11 @@ async def get_user_history_likes(db: AsyncSession,
     total = await db.execute(
         select(func.count()).select_from(query.subquery())
     )
-    total = total.scalar()
+    total = total.scalar() or 0 # 兼容 0, 即None -> int | None
 
     query = query.offset((page - 1) * per_page).limit(per_page)
     result = await db.execute(query)
-    items = result.scalars().all()
+    items = list(result.scalars().all())
     return items, total
 
 
