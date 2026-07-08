@@ -34,7 +34,14 @@ async def get_current_user_permissions(user: User) -> set[str]:
     return permissions
 
 async def get_cached_permissions(user_id: int) -> set[str] | None:
-    """缓存读取: 从 redis 缓存中获取权限字符串合集"""
+    """从 Redis 缓存中读取用户权限字符串集合
+
+    Args:
+        user_id: 用户 ID
+
+    Returns:
+        权限集合，若缓存未命中则返回 None
+    """
     key = f"{PERMISSION_CACHE_PREFIX}{user_id}"
     data = await redis_client.get(key)
     if data is None:
@@ -42,12 +49,23 @@ async def get_cached_permissions(user_id: int) -> set[str] | None:
     return set(json.loads(data))
 
 async def cache_user_permissions(user_id: int, permissions: set[str]) -> None:
-    """缓存写入: 将权限字符串合集写入 redis"""
+    """将用户权限集合写入 Redis 缓存，有效期 30 分钟
+
+    Args:
+        user_id: 用户 ID
+        permissions: 权限字符串集合
+    """
     key = f"{PERMISSION_CACHE_PREFIX}{user_id}"
     await redis_client.set(key, json.dumps(list(permissions)), ex=CACHE_TTL)
 
 async def delete_user_permissions(user_id: int) -> None:
-    """缓存删除: 删除用户权限缓存"""
+    """删除指定用户的权限 Redis 缓存
+
+    通常用于权限变更后强制下次请求重新加载。
+
+    Args:
+        user_id: 用户 ID
+    """
     key = f"{PERMISSION_CACHE_PREFIX}{user_id}"
     await redis_client.delete(key)
 
@@ -68,6 +86,19 @@ async def change_user_permissions(user_id: int, permissions: set[str]) -> None:
 
 
 async def if_owner_or_permission(user: User, owner_id: int, permission: str) -> bool:
+    """判断当前用户是否为资源所有者或拥有指定权限
+
+    用于访问控制：若用户是资源所有者则直接放行，
+    否则检查是否具备所需权限字符串。
+
+    Args:
+        user: 当前登录用户
+        owner_id: 资源所有者的用户 ID
+        permission: 所需的权限字符串（如 "article:create"）
+
+    Returns:
+        布尔值，True 表示有权限访问
+    """
     return user.id == owner_id or permission in await get_current_user_permissions(user)
     
     

@@ -28,6 +28,22 @@ router = APIRouter() # 路由,用来创建API
 async def register(user_data: UserCreate,
                    db: AsyncSession = Depends(get_db),
                    ):
+    """用户注册
+
+    检查用户名和邮箱是否已存在，对密码进行哈希处理，
+    为新建用户分配默认角色后写入数据库。
+
+    Args:
+        user_data: 注册参数，包含用户名、邮箱和密码
+        db: 数据库会话（由FastAPI自动注入）
+
+    Returns:
+        Response[UserOut]: 包含新建用户信息的统一响应
+
+    Raises:
+        HTTPException 400: 用户名或邮箱已存在
+        HTTPException 422: 密码强度不符合要求
+    """
     # 检查用户名是否已存在
     existing_user = await db.execute(
         # 查询有没有用户名相同的用户
@@ -75,6 +91,20 @@ async def login(
     from_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),
     ):
+    """用户登录
+
+    验证用户名和密码，检查账户状态，生成访问令牌和刷新令牌。
+
+    Args:
+        from_data: OAuth2 表单格式的登录参数（用户名、密码）
+        db: 数据库会话（由FastAPI自动注入）
+
+    Returns:
+        Response[dict]: 包含 access_token、refresh_token 和用户信息的统一响应
+
+    Raises:
+        HTTPException 401: 用户名不正确、密码错误或账号未激活
+    """
     # 获取用户数据
     username = from_data.username
     password = from_data.password

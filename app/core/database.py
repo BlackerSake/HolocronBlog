@@ -31,9 +31,12 @@ AsyncSessionLocal = async_sessionmaker(
 Base = declarative_base()
 
 
-async def get_db() -> AsyncGenerator[AsyncSession, None]: 
-    # Bug-1 FastAPI 的依赖注入可以接受异步生成器，但返回类型需要标注为 AsyncGenerator 
-    # 因为函数里有 yield，它是一个异步生成器，返回类型应该是 AsyncGenerator[AsyncSession, None]，而不是直接返回 AsyncSession。
-    """在路由中 获取数据库会话"""
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """
+    获取异步数据库会话，用于 FastAPI 依赖注入。
+
+    Yields:
+        AsyncSession: 自动管理生命周期数据库会话对象。
+    """
     async with AsyncSessionLocal() as session:
         yield session

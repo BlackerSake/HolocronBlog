@@ -12,7 +12,15 @@ logger = logging.getLogger(__name__)
 
 
 async def seed_default_roles() -> None:
-    """补齐默认角色、权限和关联关系。"""
+    """
+    补齐默认角色、权限及其关联关系。
+
+    遍历 ALL_PERMISSIONS 确保每个权限在数据库中存在，再遍历 DEFAULT_ROLES
+    创建或补齐角色及其与权限的多对多关联。仅在发生变更时记录日志。
+
+    Examples:
+        >>> await seed_default_roles()  # 应用启动时调用
+    """
     async with AsyncSessionLocal() as db:
         changed = False
         perm_map = {}

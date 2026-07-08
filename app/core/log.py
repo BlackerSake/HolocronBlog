@@ -4,6 +4,17 @@ import logging
 logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 
 def log_call(func):
+    """
+    异步函数调用日志装饰器。
+
+    记录被装饰函数的名称、文件路径及行号，用于追踪数据库操作等调用。
+
+    Args:
+        func: 被装饰的异步函数。
+
+    Returns:
+        Callable: 包装后的异步函数。
+    """
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):
         logger = logging.getLogger(func.__module__)

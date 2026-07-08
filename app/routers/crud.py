@@ -27,9 +27,41 @@ def create_crud_router(
         permission: str,
 ) -> APIRouter:
     """
-    ## 创建通用CRUD路由
-    生成 list(公开列表), create(创建), update(更新), delete(删除)四个路由  
-    其中create, update, delete需要 admin 权限
+    创建通用 CRUD 路由器
+
+    为指定模型自动生成 list（公开列表）、create（创建）、update（更新）、delete（删除）四个路由端点。
+    其中 create、update、delete 需要管理员权限，通过 `require_permission` 依赖检查。
+
+    Args:
+        model: SQLAlchemy 模型类
+        create_schema: 创建请求的 Pydantic 模式
+        update_schema: 更新请求的 Pydantic 模式
+        output_schema: 输出响应的 Pydantic 模式
+        prefix: 路由前缀（如 "/categories"）
+        tags: 路由标签列表（用于 API 文档分组）
+        resource_name: 资源中文名称（用于错误提示，如 "分类"）
+        permission: 所需权限字符串（如 "category:manage"）
+
+    Returns:
+        APIRouter — 配置好的路由器实例，包含 list/create/update/delete 四个端点
+
+    Examples:
+        >>> from app.models.category import Category
+        >>> from app.schemas.category import CategoryCreate, CategoryUpdate, CategoryOut
+        >>> router = create_crud_router(
+        ...     model=Category,
+        ...     create_schema=CategoryCreate,
+        ...     update_schema=CategoryUpdate,
+        ...     output_schema=CategoryOut,
+        ...     prefix="/categories",
+        ...     tags=["Categories"],
+        ...     resource_name="category",
+        ...     permission="category:manage",
+        ... )
+
+    Raises:
+        HTTPException 400: 创建时名称已存在
+        HTTPException 404: 更新或删除时资源不存在
     """
 
     router = APIRouter(prefix=prefix,tags=tags)
@@ -38,8 +70,15 @@ def create_crud_router(
     @log_call
     async def list_item(db: AsyncSession = Depends(get_db)):
         """
-        ## 获取列表
-        user 可以查看所有item
+        获取列表
+
+        返回所有资源的列表，按 ID 升序排列，无需登录。
+
+        Args:
+            db: 数据库会话
+
+        Returns:
+            Response[list[output_schema]] — 资源列表
         """
         result =  await db.execute(
             select(model).order_by(model.id)
@@ -55,8 +94,21 @@ def create_crud_router(
         current_user: User = Depends(require_permission(permission)),
     ):  
         """
-        ## 新建 item
-        仅 admin 角色可以创建(通过依赖检查完成)
+        新建资源
+
+        创建一条新的资源记录。需拥有对应的管理权限。
+        创建前会检查资源名称是否已存在。
+
+        Args:
+            item_in: 创建数据
+            db: 数据库会话
+            current_user: 当前登录用户（仅做权限校验）
+
+        Returns:
+            Response[output_schema] — 创建成功的资源数据
+
+        Raises:
+            HTTPException 400: 资源名称已存在
         """
         # 检查名称是否有重复
         existing = await db.execute(
@@ -83,8 +135,21 @@ def create_crud_router(
         current_user: User = Depends(require_permission(permission)),
     ):
         """
-        ## 更新 item
-        仅 admin 角色可以创建(通过依赖检查完成)
+        更新资源
+
+        更新指定 ID 的资源记录（支持部分更新）。需拥有对应的管理权限。
+
+        Args:
+            item_id: 资源 ID
+            item_in: 更新数据（仅更新传入的字段）
+            db: 数据库会话
+            current_user: 当前登录用户（仅做权限校验）
+
+        Returns:
+            Response[output_schema] — 更新后的资源数据
+
+        Raises:
+            HTTPException 404: 资源不存在
         """
         
         result = await db.execute(
@@ -114,8 +179,20 @@ def create_crud_router(
         current_user: User = Depends(require_permission(permission)),
     ):
         """
-        ## 删除 item
-        仅 admin 角色可以创建(通过依赖检查完成)
+        删除资源
+
+        删除指定 ID 的资源记录。需拥有对应的管理权限。
+
+        Args:
+            item_id: 资源 ID
+            db: 数据库会话
+            current_user: 当前登录用户（仅做权限校验）
+
+        Returns:
+            None — 无内容返回（HTTP 204）
+
+        Raises:
+            HTTPException 404: 资源不存在
         """
         
         result = await db.execute(

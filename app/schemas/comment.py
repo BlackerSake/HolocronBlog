@@ -4,12 +4,24 @@ from datetime import datetime
 from app.schemas.user import UserOut
 
 class CommentCreate(BaseModel):
+    """评论创建参数"""
     content: str
     parent_id: int | None = None
 
     @field_validator("content")
     @classmethod
     def content_not_empty(cls, value: str) -> str:
+        """校验评论内容不为空且不超过2000字
+
+        Args:
+            value: 评论内容字符串
+
+        Returns:
+            去除首尾空格后的评论内容
+
+        Raises:
+            ValueError: 内容为空或超过2000字时抛出
+        """
         value = value.strip() # 去除空格
         if not value:
             raise ValueError("内容不能为空")

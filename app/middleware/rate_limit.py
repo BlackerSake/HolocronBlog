@@ -14,6 +14,17 @@ _DEFAULT_LIMIT = 60              # 其他：60 次/分钟
 
 
 def _get_client_ip(request: Request) -> str:
+    """获取客户端真实IP地址
+
+    优先从 X-Forwarded-For 头获取，其次从 X-Real-IP 头获取，
+    最后回退到 request.client.host。
+
+    Args:
+        request: FastAPI 请求对象
+
+    Returns:
+        客户端IP地址字符串，无法获取时返回 "unknown"
+    """
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded:
         return forwarded.split(",")[0].strip()
@@ -24,6 +35,17 @@ def _get_client_ip(request: Request) -> str:
 
 
 def _get_path_limit(path: str) -> int:
+    """根据请求路径获取对应的限流次数
+
+    匹配 _PATH_LIMITS 中配置的路径前缀，
+    未匹配的路径使用默认限流次数。
+
+    Args:
+        path: 请求路径字符串
+
+    Returns:
+        该路径允许的最大请求次数
+    """
     for prefix, limit in _PATH_LIMITS:
         if path.startswith(prefix):
             return limit
@@ -31,6 +53,21 @@ def _get_path_limit(path: str) -> int:
 
 
 async def rate_limit_middleware(request: Request, call_next):
+    """基于Redis的IP限流中间件
+
+    对每个请求按客户端IP和请求路径进行计数，
+    超过限制时返回 429 状态码。
+
+    Args:
+        request: FastAPI 请求对象
+        call_next: 下一个中间件或路由处理函数
+
+    Returns:
+        请求的响应对象
+
+    Raises:
+        HTTPException 429: 请求频率超过限制时抛出
+    """
     client_ip = _get_client_ip(request)
     limit = _get_path_limit(request.url.path)
     key = f"rate_limit:{client_ip}:{request.url.path}"

@@ -15,6 +15,7 @@ _markdown = mistune.create_markdown()
 
 
 def render_markdown(content: str) -> str:
+    """将 Markdown 文本渲染为 HTML"""
     return _markdown(content)
 
 
@@ -25,7 +26,15 @@ def slugify(text: str) -> str:
     return text or 'untitled'
 
 async def get_published_article_by_slug(db: AsyncSession, slug: str) -> Article | None:
-    """根据slug获取一篇已发布的未删除文章"""
+    """根据 slug 获取一篇已发布的未删除文章，关联加载作者、分类和标签
+
+    Args:
+        db: 数据库会话
+        slug: 文章唯一标识
+
+    Returns:
+        文章对象，若不存在则返回 None
+    """
     result = await db.execute(
         select(Article)
         .where(Article.slug == slug,
@@ -43,7 +52,15 @@ async def get_article_by_slug(
         db: AsyncSession,
         slug: str,
 ) -> Article | None:
-    """根据slug获取一篇未删除文章（不限发布状态）"""
+    """根据 slug 获取一篇未删除文章（不限发布状态），关联加载作者、分类和标签
+
+    Args:
+        db: 数据库会话
+        slug: 文章唯一标识
+
+    Returns:
+        文章对象，若不存在则返回 None
+    """
     result = await db.execute(
         select(Article)
         .where(Article.slug == slug, Article.is_deleted == False)
@@ -57,7 +74,16 @@ async def get_article_by_slug(
 
 
 async def resolve_slug_conflict(db: AsyncSession, slug: str, user_id: int) -> str:
-    """检查slug是否已存在，冲突则追加后缀"""
+    """检查 slug 是否已存在，冲突则追加时间戳后缀以避免重复
+
+    Args:
+        db: 数据库会话
+        slug: 待检查的 slug 值
+        user_id: 当前用户 ID，用于生成唯一后缀
+
+    Returns:
+        无冲突的 slug 字符串
+    """
     existing = await db.execute(
         select(Article).where(Article.slug == slug))
     if existing.scalar_one_or_none():
@@ -66,7 +92,13 @@ async def resolve_slug_conflict(db: AsyncSession, slug: str, user_id: int) -> st
 
 
 async def set_article_tags(db: AsyncSession, article: Article, tag_ids: list[int]) -> None:
-    """给文章设置标签关联"""
+    """给文章设置标签关联，替换原有的标签集合
+
+    Args:
+        db: 数据库会话
+        article: 文章对象
+        tag_ids: 标签 ID 列表，为空则不操作
+    """
     if not tag_ids:
         return
     tags = (await db.execute(
@@ -87,7 +119,25 @@ async def query_articles(
     author_id: int | None = None,
     is_admin: bool = False,
 ) -> tuple[list[ArticleListItem], int]:
-    """文章列表查询+分页，返回 (items, total)"""
+    """文章列表查询及分页，支持多条件筛选
+
+    根据分类、标签、搜索关键词、发布状态、作者等条件组合筛选，
+    管理员模式可额外查看自己未发布的文章。
+
+    Args:
+        db: 数据库会话
+        page: 页码，从 1 开始
+        per_page: 每页条数
+        category_id: 按分类筛选
+        tag_id: 按标签筛选
+        search: 按标题或内容关键词搜索
+        is_published: 发布状态筛选，None 表示不限
+        author_id: 按作者筛选
+        is_admin: 是否为管理员模式（可查看自己的未发布文章）
+
+    Returns:
+        (文章列表, 总条数) 的元组
+    """
     query = select(Article).where(Article.is_deleted == False)
 
     if is_published is not None:
@@ -133,7 +183,19 @@ async def create_article(
     article_in: ArticleCreate,
     author_id: int,
 ) -> Article:
-    """创建文章的完整业务流程"""
+    """创建文章的完整业务流程
+
+    根据标题生成 slug（若冲突自动追加时间戳后缀），
+    将 Markdown 内容渲染为 HTML，并关联指定标签。
+
+    Args:
+        db: 数据库会话
+        article_in: 文章创建请求数据（标题、内容、分类、标签等）
+        author_id: 作者用户 ID
+
+    Returns:
+        创建成功的文章对象（含自动生成的 slug 和 content_html）
+    """
     slug = slugify(article_in.title)
     slug = await resolve_slug_conflict(db, slug, author_id)
     html = render_markdown(article_in.content)
@@ -164,7 +226,19 @@ async def update_article(
     article: Article,
     article_in: ArticleUpdate,
 ) -> Article:
-    """更新文章的完整业务流程"""
+    """更新文章的完整业务流程
+
+    仅更新请求中传入的字段，自动重新生成 slug 和 content_html，
+    若提供了 tags_id 则替换文章的标签关联。
+
+    Args:
+        db: 数据库会话
+        article: 待更新的文章对象
+        article_in: 文章更新请求数据（仅包含需要更新的字段）
+
+    Returns:
+        更新后的文章对象
+    """
     update_data = article_in.model_dump(exclude_unset=True, exclude={"tags_id"})
     for key, value in update_data.items():
         setattr(article, key, value)

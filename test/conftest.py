@@ -27,6 +27,53 @@ from app.services.permission_service import get_cached_permissions, cache_user_p
 
 # ── 基础设施 ──
 
+
+class FakeLikeRedis:
+    def __init__(self):
+        self.strings = {}
+        self.sets = {}
+
+    async def exists(self, key):
+        return int(key in self.strings or key in self.sets)
+
+    async def set(self, key, value, nx=False, ex=None):
+        if nx and key in self.strings:
+            return None
+        self.strings[key] = str(value)
+        return True
+
+    async def delete(self, key):
+        self.strings.pop(key, None)
+        self.sets.pop(key, None)
+        return 1
+
+    async def sadd(self, key, *values):
+        bucket = self.sets.setdefault(key, set())
+        before = len(bucket)
+        bucket.update(str(value) for value in values)
+        return len(bucket) - before
+
+    async def sismember(self, key, value):
+        return str(value) in self.sets.get(key, set())
+
+    async def get(self, key):
+        return self.strings.get(key)
+
+    async def eval(self, script, numkeys, *values):
+        users_key, count_key = values[:numkeys]
+        user_id = str(values[numkeys])
+        users = self.sets.setdefault(users_key, set())
+        count = int(self.strings.get(count_key, "0"))
+        if user_id in users:
+            users.remove(user_id)
+            count = max(count - 1, 0)
+            self.strings[count_key] = str(count)
+            return [0, count]
+        users.add(user_id)
+        count += 1
+        self.strings[count_key] = str(count)
+        return [1, count]
+
 @pytest.fixture(scope="session")
 def event_loop():
     policy = asyncio.get_event_loop_policy()
@@ -81,9 +128,13 @@ def mock_redis():
     svc.get_cached_permissions = AsyncMock(return_value=None)
     svc.cache_user_permissions = AsyncMock()
     svc.delete_user_permissions = AsyncMock()
+    import app.services.like_service as like_svc
+    fake_like_redis = FakeLikeRedis()
+    like_svc.redis_client = fake_like_redis
     # 各路由模块在 import 时已拿到原始函数引用，需在自身命名空间也 mock
     import app.routers.admin as admin_mod
     admin_mod.delete_user_permissions = AsyncMock()
+    return fake_like_redis
 
 
 @pytest_asyncio.fixture

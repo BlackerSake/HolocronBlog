@@ -15,11 +15,23 @@ _ALLOWED_ORIGINS = set(settings.cors_origin_list)
 
 class ConnectionManager:
     def __init__(self):
-        # user_id -> WebSocket
+        """初始化连接管理器，维护 user_id 到 WebSocket 的映射。"""
         self.active_connections: Dict[int, WebSocket] = {}
 
     async def connect(self, websocket: WebSocket, db: AsyncSession) -> int | None:
-        """验证 JWT token 后建立连接，返回 user_id"""
+        """
+        验证 WebSocket 连接的 JWT 令牌并建立连接。
+
+        依次检查 Origin 防止 CSWSH 攻击、验证查询参数中的 JWT 令牌、
+        确认用户存在且未被禁用。同一用户的新连接会关闭旧连接。
+
+        Args:
+            websocket: 待建立的 WebSocket 连接。
+            db: 异步数据库会话，用于查询用户。
+
+        Returns:
+            int | None: 认证通过返回用户 ID，失败返回 None。
+        """
         # Origin 检查，防止 CSWSH
         origin = websocket.headers.get("origin", "")
         if origin not in _ALLOWED_ORIGINS:
@@ -61,11 +73,17 @@ class ConnectionManager:
         return user.id
 
     def disconnect(self, user_id: int):
-        """断开连接"""
+        """断开并移除指定用户的 WebSocket 连接。"""
         self.active_connections.pop(user_id, None)
 
     async def send_personal_message(self, user_id: int, message: str):
-        """发送私信"""
+        """
+        向指定用户发送私信。
+
+        Args:
+            user_id: 目标用户 ID。
+            message: 要发送的文本消息。
+        """
         ws = self.active_connections.get(user_id)
         if ws:
             try:
@@ -74,7 +92,7 @@ class ConnectionManager:
                 self.disconnect(user_id)
 
     async def broadcast_system(self, content: str):
-        """广播系统消息"""
+        """向所有已连接用户广播系统消息。"""
         message = {
             "type": "system",
             "message": content,
@@ -84,6 +102,7 @@ class ConnectionManager:
             await self.send_personal_message(uid, json.dumps(message, ensure_ascii=False))
 
     async def is_online(self, user_id: int) -> bool:
+        """检查指定用户当前是否在线。"""
         return user_id in self.active_connections
 
 

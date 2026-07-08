@@ -77,6 +77,7 @@ app.add_middleware(BaseHTTPMiddleware, dispatch=rate_limit_middleware)
 
 @app.get("/")
 async def root():
+    """根路由，返回博客欢迎信息"""
     return {"message":"This is my blog"}
 
 @app.get("/health/db")

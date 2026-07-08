@@ -5,7 +5,9 @@ from sqlalchemy import select
 from app.services.like_service import (
     update_like_count,
     change_like_status,
+    change_like_status_cached,
     get_like_status,
+    get_like_status_cached,
     batch_get_like_status,
     get_the_likers,
     get_user_history_likes,
@@ -132,6 +134,41 @@ class TestChangeLikeStatus:
             )
         )
         assert record is None
+
+
+class TestCachedLikeStatus:
+    """Redis 点赞缓存"""
+
+    async def test_toggle_updates_redis_and_db_bridge(self, mock_redis, db_session, published_article, test_user):
+        status = await change_like_status_cached(
+            db_session, test_user.id, published_article.id, "article"
+        )
+
+        assert status["is_liked"] is True
+        assert status["like_count"] == 1
+        assert str(test_user.id) in mock_redis.sets[f"like:article:{published_article.id}:users"]
+        assert mock_redis.strings[f"like:article:{published_article.id}:count"] == "1"
+        record = await db_session.scalar(
+            select(Likes).where(
+                Likes.user_id == test_user.id,
+                Likes.target_id == published_article.id,
+                Likes.target_type == "article",
+            )
+        )
+        assert record is not None
+
+    async def test_status_reads_redis_first(self, mock_redis, db_session, published_article, test_user):
+        base = f"like:article:{published_article.id}"
+        mock_redis.strings[f"{base}:loaded"] = "1"
+        mock_redis.strings[f"{base}:count"] = "7"
+        mock_redis.sets[f"{base}:users"] = {str(test_user.id)}
+
+        status = await get_like_status_cached(
+            db_session, test_user.id, published_article.id, "article", 0
+        )
+
+        assert status["is_liked"] is True
+        assert status["like_count"] == 7
 
 
 class TestGetLikeStatus:

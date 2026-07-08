@@ -73,9 +73,16 @@ async def get_notifications_list(db: AsyncSession,
     return items, total
 
 async def get_unread_notifications_count(db: AsyncSession, user_id: int) -> int:
-    """
-    ## 获取指定用户未读通知数量
-    这是轮询的核心接口，前端每 30 秒调一次
+    """获取指定用户未读通知数量
+
+    前端轮询的核心接口，通常每 30 秒调用一次以刷新未读标记。
+
+    Args:
+        db: 数据库会话
+        user_id: 用户 ID
+
+    Returns:
+        未读通知数量，0 表示没有未读通知
     """
     count = await db.scalar(
         select(func.count())
@@ -85,9 +92,17 @@ async def get_unread_notifications_count(db: AsyncSession, user_id: int) -> int:
     )
     return count or 0
 async def mark_notification_is_read(db: AsyncSession, notification_id: int, user_id: int) -> bool:
-    """
-    ## 标记通知为已读
-    必须校验通知的 recipient_id 等于当前 user_id
+    """标记单条通知为已读
+
+    必须校验通知的 recipient_id 等于当前 user_id，防止越权操作。
+
+    Args:
+        db: 数据库会话
+        notification_id: 通知 ID
+        user_id: 用户 ID（用于所有权校验）
+
+    Returns:
+        标记成功返回 True，通知不存在或不属于该用户返回 False
     """
     result = await db.execute(
         select(Notification)
@@ -103,10 +118,16 @@ async def mark_notification_is_read(db: AsyncSession, notification_id: int, user
     return True
 
 async def mark_all_notification_is_read(db: AsyncSession, user_id: int) -> int:
-    """
-    ## 批量标记所有通知为已读  
-    返回:  
-        - 被标记的通知数量, 0 表示没有通知被标记
+    """批量标记指定用户的所有未读通知为已读
+
+    使用批量 UPDATE 语句一次性更新，避免逐条操作。
+
+    Args:
+        db: 数据库会话
+        user_id: 用户 ID
+
+    Returns:
+        被标记的通知数量，0 表示没有未读通知需要标记
     """
     result = await db.execute(
         update(Notification)

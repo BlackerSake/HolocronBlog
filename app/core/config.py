@@ -21,6 +21,18 @@ class Settings(BaseSettings):
 
     # Railway 注入 postgresql:// → 自动转异步驱动
     def __init__(self, **kwargs):
+        """
+        初始化配置，自动转换数据库 URL 并验证生产环境密钥。
+
+        若 DATABASE_URL 以 postgresql:// 开头，自动替换为 postgresql+asyncpg://
+        以启用异步驱动。生产环境（PostgreSQL）下强制要求通过环境变量设置 SECRET_KEY。
+
+        Args:
+            **kwargs: 传递给 BaseSettings 的父类参数。
+
+        Raises:
+            ValueError: 生产环境使用默认 SECRET_KEY 时抛出。
+        """
         super().__init__(**kwargs)
         if self.DATABASE_URL.startswith("postgresql://"):
             self.DATABASE_URL = self.DATABASE_URL.replace(
@@ -45,12 +57,12 @@ class Settings(BaseSettings):
 
     @property
     def tz(self) -> ZoneInfo:
-        """使用时,获取ZoneInfo 对象"""
+        """获取配置时区对应的 ZoneInfo 对象。"""
         return ZoneInfo(self.TIMEZONE)
 
     @property
     def cors_origin_list(self) -> list[str]:
-        """将逗号分隔的 CORS_ORIGINS 拆成列表"""
+        """将逗号分隔的 CORS_ORIGINS 字符串拆分为列表，并去除空白。"""
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
 
     class Config:

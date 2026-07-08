@@ -15,6 +15,21 @@ async def query_all_user_role(
     role_name: str | None = None,
     search: str | None = None,
 ) -> tuple[list[UserWithRoleList], int]:
+    """查询所有用户及其角色信息，支持分页、按角色和关键词搜索
+
+    用于后台管理：以列表形式展示用户信息，可按角色名筛选
+    或按用户名/邮箱模糊搜索。
+
+    Args:
+        db: 数据库会话
+        page: 页码，从 1 开始
+        per_page: 每页条数
+        role_name: 按角色名称筛选
+        search: 按用户名或邮箱模糊搜索
+
+    Returns:
+        (用户列表（含角色信息）, 总条数) 的元组
+    """
     query = select(User)
 
     if role_name:

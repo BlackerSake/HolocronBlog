@@ -25,10 +25,21 @@ async def create_comment_post(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    ### 创建评论
-    依赖注入获取当前用户  
-    解析slug, 查询文章是否存在  
-    调用 service 层 `create_comment` 创建评论
+    创建评论
+
+    为指定文章创建新评论，支持回复已有评论（通过 parent_id 实现嵌套）。
+
+    Args:
+        slug: 文章 URL 标识
+        comment_in: 评论创建数据（内容、父评论 ID 可选）
+        user: 当前登录用户
+        db: 数据库会话
+
+    Returns:
+        Response[CommentOut] — 创建的评论数据
+
+    Raises:
+        HTTPException 404: 文章不存在
     """
     article = await db.scalar(
         select(Article)
@@ -63,9 +74,19 @@ async def list_comments(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    ### 获取文章所有评论
-    - 调用 `get_article_comments` 查出扁平列表。
-    - 调用 `build_comment_tree` 组装树形结构。
+    获取文章所有评论
+
+    查出指定文章的扁平评论列表，并组装为树形结构（含子评论嵌套）。
+
+    Args:
+        slug: 文章 URL 标识
+        db: 数据库会话
+
+    Returns:
+        Response[list[CommentOut]] — 树形结构的评论列表
+
+    Raises:
+        HTTPException 404: 文章不存在
     """
     article = await db.scalar(
         select(Article)
@@ -90,8 +111,17 @@ async def delete_comment(
     current_user: User = Depends(get_current_user)
 ):
     """
-    ### 删除评论
-    - 调用 `soft_delete_comment` 删除评论
+    删除评论
+
+    软删除指定评论，仅评论作者或管理员可操作。
+
+    Args:
+        comment_id: 评论 ID
+        db: 数据库会话
+        current_user: 当前登录用户
+
+    Returns:
+        None — 无内容返回（HTTP 204）
     """
  
     await soft_delete_comment(
