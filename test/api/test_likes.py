@@ -3,6 +3,17 @@ import pytest
 from httpx import AsyncClient
 
 
+async def flush_like_stream(mock_redis, db_session):
+    """测试辅助：模拟后台 consumer 将 fake Redis Stream 批量落库。"""
+    from app.core.like_stream import LIKE_STREAM, _flush_to_db
+
+    messages = list(mock_redis.streams.get(LIKE_STREAM, []))
+    if not messages:
+        return
+    await _flush_to_db(messages, db_session)
+    mock_redis.streams[LIKE_STREAM] = []
+
+
 class TestToggleLike:
     """POST /articles/{slug}/like"""
 
@@ -138,11 +149,12 @@ class TestMeLikeHistory:
         assert resp.status_code == 200
         assert resp.json() == []
 
-    async def test_returns_history(self, client: AsyncClient, auth_headers, published_article):
+    async def test_returns_history(self, client: AsyncClient, auth_headers, published_article, mock_redis, db_session):
         """点赞后 -> 历史记录存在"""
         await client.post(
             f"/articles/{published_article.slug}/like", headers=auth_headers,
         )
+        await flush_like_stream(mock_redis, db_session)
         resp = await client.get(
             "/me/like-history", params={"target_type": "article"}, headers=auth_headers,
         )
@@ -166,11 +178,12 @@ class TestMeLikeHistory:
         assert resp.status_code == 200
         assert resp.json() == []
 
-    async def test_returns_comment_history_details(self, client: AsyncClient, auth_headers, published_article, existing_comment, test_user):
+    async def test_returns_comment_history_details(self, client: AsyncClient, auth_headers, published_article, existing_comment, test_user, mock_redis, db_session):
         """评论点赞历史包含评论内容、原文章和作者信息"""
         await client.post(
             f"/comments/{existing_comment.id}/like", headers=auth_headers,
         )
+        await flush_like_stream(mock_redis, db_session)
         resp = await client.get(
             "/me/like-history", params={"target_type": "comment"}, headers=auth_headers,
         )
@@ -186,7 +199,7 @@ class TestMeLikeHistory:
         assert data[0]["author_id"] == test_user.id
         assert data[0]["author_name"] == "test"
 
-    async def test_returns_mixed_history_without_type(self, client: AsyncClient, auth_headers, published_article, existing_comment):
+    async def test_returns_mixed_history_without_type(self, client: AsyncClient, auth_headers, published_article, existing_comment, mock_redis, db_session):
         """不传 target_type -> 返回文章和评论混合历史"""
         await client.post(
             f"/articles/{published_article.slug}/like", headers=auth_headers,
@@ -194,6 +207,7 @@ class TestMeLikeHistory:
         await client.post(
             f"/comments/{existing_comment.id}/like", headers=auth_headers,
         )
+        await flush_like_stream(mock_redis, db_session)
         resp = await client.get(
             "/me/like-history", headers=auth_headers,
         )
@@ -201,7 +215,7 @@ class TestMeLikeHistory:
         data = resp.json()
         assert {item["target_type"] for item in data} == {"article", "comment"}
 
-    async def test_history_skips_missing_targets(self, client: AsyncClient, auth_headers, db_session, published_article, test_user):
+    async def test_history_skips_missing_targets(self, client: AsyncClient, auth_headers, db_session, published_article, test_user, mock_redis):
         """孤儿点赞记录不应生成空白假历史"""
         from app.models.like import Likes
 
@@ -210,6 +224,7 @@ class TestMeLikeHistory:
         await client.post(
             f"/articles/{published_article.slug}/like", headers=auth_headers,
         )
+        await flush_like_stream(mock_redis, db_session)
 
         resp = await client.get("/me/like-history", headers=auth_headers)
 
@@ -219,7 +234,7 @@ class TestMeLikeHistory:
         assert data[0]["target_id"] == published_article.id
         assert data[0]["title"] == published_article.title
 
-    async def test_pagination(self, client: AsyncClient, auth_headers, published_article, db_session, test_user, category):
+    async def test_pagination(self, client: AsyncClient, auth_headers, published_article, db_session, test_user, category, mock_redis):
         """分页参数生效"""
         from app.models.article import Article
         a2 = Article(
@@ -236,6 +251,7 @@ class TestMeLikeHistory:
             await client.post(
                 f"/articles/{article.slug}/like", headers=auth_headers,
             )
+        await flush_like_stream(mock_redis, db_session)
         resp = await client.get(
             "/me/like-history",
             params={"target_type": "article", "page": 1, "per_page": 1},
@@ -256,7 +272,7 @@ class TestUsersLikeHistory:
         assert resp.status_code == 200
         assert resp.json() == []
 
-    async def test_returns_users_history(self, client: AsyncClient, auth_headers, published_article, test_user, other_user):
+    async def test_returns_users_history(self, client: AsyncClient, auth_headers, published_article, test_user, other_user, mock_redis, db_session):
         """查看其他用户的点赞历史"""
         from app.core.security import create_access_token
         other_token = create_access_token(data={"sub": other_user.username})
@@ -265,6 +281,7 @@ class TestUsersLikeHistory:
         await client.post(
             f"/articles/{published_article.slug}/like", headers=other_headers,
         )
+        await flush_like_stream(mock_redis, db_session)
         resp = await client.get(
             f"/users/{other_user.id}/like-history",
             params={"target_type": "article"},

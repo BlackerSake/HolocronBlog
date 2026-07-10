@@ -139,7 +139,7 @@ class TestChangeLikeStatus:
 class TestCachedLikeStatus:
     """Redis 点赞缓存"""
 
-    async def test_toggle_updates_redis_and_db_bridge(self, mock_redis, db_session, published_article, test_user):
+    async def test_toggle_updates_redis_and_stream(self, mock_redis, db_session, published_article, test_user):
         status = await change_like_status_cached(
             db_session, test_user.id, published_article.id, "article"
         )
@@ -148,14 +148,11 @@ class TestCachedLikeStatus:
         assert status["like_count"] == 1
         assert str(test_user.id) in mock_redis.sets[f"like:article:{published_article.id}:users"]
         assert mock_redis.strings[f"like:article:{published_article.id}:count"] == "1"
-        record = await db_session.scalar(
-            select(Likes).where(
-                Likes.user_id == test_user.id,
-                Likes.target_id == published_article.id,
-                Likes.target_type == "article",
-            )
-        )
-        assert record is not None
+        _, event = mock_redis.streams["like:events"][0]
+        assert event["user_id"] == str(test_user.id)
+        assert event["target_id"] == str(published_article.id)
+        assert event["target_type"] == "article"
+        assert event["is_liked"] == "1"
 
     async def test_status_reads_redis_first(self, mock_redis, db_session, published_article, test_user):
         base = f"like:article:{published_article.id}"

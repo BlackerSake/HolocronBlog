@@ -67,8 +67,7 @@ class TestMiddlewarePassthrough:
     async def test_passthrough(self, client: AsyncClient):
         """正常请求返回 200"""
         with patch("app.middleware.rate_limit.redis_client") as m:
-            m.incr = AsyncMock(return_value=1)
-            m.ttl = AsyncMock(return_value=55)
+            m.eval = AsyncMock(return_value=[1, 0])
             resp = await client.get("/ping")
         assert resp.status_code == 200
         assert resp.json() == {"ok": True}
@@ -76,8 +75,7 @@ class TestMiddlewarePassthrough:
     async def test_multiple_requests_pass(self, client: AsyncClient):
         """低于限额的多次请求正常通过"""
         with patch("app.middleware.rate_limit.redis_client") as m:
-            m.incr = AsyncMock(return_value=1)
-            m.ttl = AsyncMock(return_value=55)
+            m.eval = AsyncMock(return_value=[1, 0])
             for _ in range(5):
                 resp = await client.get("/ping")
                 assert resp.status_code == 200

@@ -1,32 +1,89 @@
 import asyncio
-from typing import cast
 import logging
+import time
 from sqlalchemy import and_, exists, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.like_stream import LIKE_STREAM, LIKE_STREAM_MAXLEN
 from app.core.redis import redis_client
 from app.models.article import Article
 from app.models.comment import Comment
 from app.models.like import Likes
 from app.models.user import User
-from app.core.like_stream import append_like_event
 
 logger = logging.getLogger(__name__)
 
+#  Lua 脚本原子完成: Set 切换 + Count 更新 + XADD 写入 Stream
+# 三次 Redis 操作在同一 EVAL 内完成,消除 dual-write 不一致窗口
 _TOGGLE_LIKE_LUA = """
 local liked = redis.call("SISMEMBER", KEYS[1], ARGV[1])
+local is_liked
+local count
 if liked == 1 then
     redis.call("SREM", KEYS[1], ARGV[1])
-    local count = tonumber(redis.call("GET", KEYS[2]) or "0") - 1
+    count = tonumber(redis.call("GET", KEYS[2]) or "0") - 1
     if count < 0 then count = 0 end
-    redis.call("SET", KEYS[2], count)
-    return {0, count}
+    is_liked = 0
+else
+    redis.call("SADD", KEYS[1], ARGV[1])
+    count = tonumber(redis.call("GET", KEYS[2]) or "0") + 1
+    is_liked = 1
 end
 
-redis.call("SADD", KEYS[1], ARGV[1])
-local count = tonumber(redis.call("GET", KEYS[2]) or "0") + 1
 redis.call("SET", KEYS[2], count)
-return {1, count}
+local event_id = redis.call(
+    "XADD", KEYS[3], "MAXLEN", "~", ARGV[4], "*",
+    "user_id", ARGV[1],
+    "target_id", ARGV[2],
+    "target_type", ARGV[3],
+    "is_liked", is_liked
+)
+return {is_liked, count, event_id}
 """
+
+LIKE_CACHE_TTL = 60 * 30              # 缓存 TTL: 30 分钟,统一过期防止幽灵状态
+LIKE_INIT_LOCK_TTL = 5               # 预热分布式锁超时: 5 秒,防止死锁
+LIKE_INIT_WAIT_TIMES = 5             # 自旋等待次数
+LIKE_INIT_WAIT_SECONDS = 0.02        # 单次自旋间隔 (20ms)
+LIKE_REDIS_BREAKER_THRESHOLD = 5     # 连续 5 次 Redis 失败 → 熔断打开
+LIKE_REDIS_BREAKER_RESET_SECONDS = 30  # 熔断后 30 秒进入半开状态,放行探测请求
+
+_redis_failure_count = 0
+_redis_breaker_opened_at = 0.0
+
+
+class LikeCacheWarmupError(RuntimeError):
+    """点赞缓存预热未完成,调用方应 fail-fast 并降级到 DB 路径"""
+
+
+def _redis_breaker_allows_request() -> bool:
+    """
+    ## 判断 Redis 点赞实时链路是否允许请求进入
+    熔断器三态: CLOSED → OPEN → HALF_OPEN → CLOSED
+    - CLOSED:  正常,所有请求走 Redis
+    - OPEN:    连续 LIKE_REDIS_BREAKER_THRESHOLD 次失败 → 熔断打开,全部走 DB
+    - HALF_OPEN: LIKE_REDIS_BREAKER_RESET_SECONDS 后放行一个探测请求,
+                 成功则回到 CLOSED,失败则回到 OPEN
+    当前阶段: 进程内计数器;多 worker 下每个进程独立计数,
+    生产级应用应改用 Redis 存储熔断状态实现全局共享
+    """
+    if _redis_failure_count < LIKE_REDIS_BREAKER_THRESHOLD:
+        return True
+    return time.monotonic() - _redis_breaker_opened_at >= LIKE_REDIS_BREAKER_RESET_SECONDS
+
+
+def _record_redis_success() -> None:
+    """记录 Redis 点赞实时链路成功,关闭熔断"""
+    global _redis_failure_count, _redis_breaker_opened_at
+    _redis_failure_count = 0
+    _redis_breaker_opened_at = 0.0
+
+
+def _record_redis_failure() -> None:
+    """记录 Redis 点赞实时链路失败,连续失败后进入 OPEN 状态"""
+    global _redis_failure_count, _redis_breaker_opened_at
+    _redis_failure_count += 1
+    if _redis_failure_count >= LIKE_REDIS_BREAKER_THRESHOLD:
+        _redis_breaker_opened_at = time.monotonic()
 
 
 def _like_keys(target_id: int, target_type: str) -> tuple[str, str, str, str]:
@@ -57,7 +114,7 @@ async def _get_target_like_count(db: AsyncSession, target_id: int, target_type: 
         target_type: 目标类型（"article" 或 "comment"）
 
     Returns:
-        点赞计数值，若目标不存在则返回 0
+        点赞计数值,若目标不存在则返回 0
     """
     model = Article if target_type == "article" else Comment
     count = await db.scalar(select(model.like_count).where(model.id == target_id))
@@ -66,10 +123,12 @@ async def _get_target_like_count(db: AsyncSession, target_id: int, target_type: 
 
 async def _warm_like_cache(db: AsyncSession, target_id: int, target_type: str) -> None:
     """
-    ## 缓存预热(懒加载 + 分布式锁防止缓存击穿)  
-    ### 分布式做 + 自旋等待  
+    ## 缓存预热(懒加载 + 分布式锁防止缓存击穿)
+    ### 分布式做 + 自旋等待
     - 第一个拿到锁的请求去 查db 并写入缓存
     - 其他请求自旋等待,等锁释放后直接读取缓存
+    - 自旋超时未就绪则抛出 LikeCacheWarmupError,调用方降级到 DB 路径
+    - 缓存 TTL: LIKE_CACHE_TTL (30 分钟),loaded / count / users 统一过期
     Args:
         db: 数据库会话
         target_id: 目标对象 ID
@@ -79,20 +138,32 @@ async def _warm_like_cache(db: AsyncSession, target_id: int, target_type: str) -
     if await redis_client.exists(loaded_key):
         return
 
-    locked = await redis_client.set(lock_key, "1", nx=True, ex=5)
-    # 抢锁, 若失败则短暂自旋等待，避免缓存击穿
+    locked = await redis_client.set(lock_key, "1", nx=True, ex=LIKE_INIT_LOCK_TTL)
+    # 抢锁, 若失败则短暂自旋等待,避免缓存击穿
     # NX:只有键不存在时才设置成功. 用以保证互斥
-    # EX=5: 锁过期时间5秒,防止死锁. 二者结合保证进程崩了,锁自动释放,
+    # EX: 锁过期时间 LIKE_INIT_LOCK_TTL 秒,防止死锁. 二者结合保证进程崩了,锁自动释放,
     if not locked:
         # 没抢到锁,即锁其他进程抢占. 短暂自旋等待,等待其他进程预热完  
-        # TODO 这是一个简单处理方法,后续可以引入pub/sub
-        for _ in range(5):
-            await asyncio.sleep(0.02)
+
+        for _ in range(LIKE_INIT_WAIT_TIMES):
+            await asyncio.sleep(LIKE_INIT_WAIT_SECONDS)
             if await redis_client.exists(loaded_key):
                 return
-        return
+        # 还没预热完毕,抛出异常让上层降级到 DB 路径
+        raise LikeCacheWarmupError(f"like cache warm-up timeout: {target_type}:{target_id}")
+    """
+    TODO 缓存预热
+    可以升级为redis分布式锁 + 双重锁检查: 自旋退出之前再做一次existing检查
+    还可以不做自旋,自旋会在asyncio里阻塞事件循环,虽然有sleep让出,但是盲等可优化
+    故引入**本地缓存 + Redis Pub/Sub缓存失效广播**:对于每个worker维护一个asyncio.Event
+    预热完成之后publish 事件like:warmed:{target_id} 其他的worker通过Pub/Sub广播唤醒,无需自旋轮询
+    """
+
+
     # 抢到锁 -> 查询db 并写入 redis 缓存
     try:
+        if await redis_client.exists(loaded_key):
+            return
         result = await db.execute(
             select(Likes.user_id).where(
                 Likes.target_id == target_id,
@@ -103,8 +174,11 @@ async def _warm_like_cache(db: AsyncSession, target_id: int, target_type: str) -
         await redis_client.delete(users_key)
         if user_ids:
             await redis_client.sadd(users_key, *user_ids)  # 批量写入 Set
-        await redis_client.set(count_key, len(user_ids))    # 计数
-        await redis_client.set(loaded_key, "1")     # 标记已加载
+        
+        # 统一 30 分钟 TTL,与 loaded/count 一起过期,防止幽灵状态
+        await redis_client.expire(users_key, LIKE_CACHE_TTL)
+        await redis_client.set(count_key, len(user_ids), ex=LIKE_CACHE_TTL)    # 计数
+        await redis_client.set(loaded_key, "1", ex=LIKE_CACHE_TTL)     # 标记已加载
     finally:
         await redis_client.delete(lock_key)
 
@@ -115,7 +189,7 @@ async def _set_like_status_in_db(db: AsyncSession,
                                  target_type: str,
                                  is_liked: bool,
                                  *,
-                                 commit:bool = True) -> None:
+                                 commit: bool = True) -> None:
     """
     ## 将点赞状态持久化写入db(幂等db写入)
     所谓幂等性:对同一个请求,重复执行多次操作,产生同样的结果
@@ -127,7 +201,7 @@ async def _set_like_status_in_db(db: AsyncSession,
         user_id: 用户 ID
         target_id: 目标对象 ID
         target_type: 目标类型（"article" 或 "comment"）
-        is_liked: 目标点赞状态（True 表示点赞，False 表示取消点赞）
+        is_liked: 目标点赞状态（True 表示点赞,False 表示取消点赞）
     """
     existing = await db.execute(
         select(Likes).where(
@@ -150,6 +224,16 @@ async def _set_like_status_in_db(db: AsyncSession,
             changed = True
     if commit and changed:
         await db.commit()
+
+
+async def _change_like_status_in_db_with_count(db: AsyncSession,
+                                               user_id: int,
+                                               target_id: int,
+                                               target_type: str) -> tuple[bool, int]:
+    """DB fallback 路径：切换点赞状态并返回 DB 中的当前计数"""
+    is_liked = await change_like_status(db, user_id, target_id, target_type)
+    like_count = await _get_target_like_count(db, target_id, target_type)
+    return is_liked, like_count
 
 
 async def _update_target_count(db: AsyncSession,
@@ -199,7 +283,7 @@ async def change_like_status(db: AsyncSession,
                              target_type: str) -> bool:
     """
     ## 切换点赞的状态
-    返回 True 表示当前是已赞状态，False 表示未赞状态
+    返回 True 表示当前是已赞状态,False 表示未赞状态
     """
     existing = await db.execute(
         select(Likes).where(
@@ -220,35 +304,38 @@ async def change_like_status_cached(db: AsyncSession,
                                     target_id: int,
                                     target_type: str) -> dict:
     """
-    ## Redis 原子切换点赞状态，接口实时返回 Redis 计数。
-    ### 首次请求:
-    - 缓存未预热加载 -> `_warm_like_cache` 预热缓存 查db 写入redis缓存
-    - Lua 脚本 原子切换点赞状态并返回最新计数
-    - `set_like_status_in_db` 将点赞状态持久化写入数据库
-    ### 后续请求:
-    - 缓存已经命中 -> **直接跳过预热**
-    - Lua 脚本 原子切换点赞状态并返回最新计数
-    - `set_like_status_in_db` 将点赞状态持久化写入数据库
-    ### redis 挂了:
-    except 降级回退到 db 操作
+    ## Redis 原子切换点赞状态,接口实时返回 Redis 计数
+
+    ### 流程说明:
+    1. 熔断器检查: OPEN 态直接走 DB fallback,不碰 Redis
+    2. 缓存预热: `_warm_like_cache` 确保 like set + count 已就绪 (懒加载)
+    3. Lua 脚本原子执行:
+       - `SISMEMBER` 判断当前状态
+       - `SADD`/`SREM` 切换用户集合
+       - `SET` 更新计数
+       - `XADD` 追加事件到 Redis Stream
+       — 以上四次操作在同一次 EVAL 内完成,消除 dual-write 不一致窗口
+    4. DB 持久化由 Stream consumer 异步批量落库,不阻塞当前请求
+
+    ### 异常路径:
+    - Lua/Redis 异常 → `_record_redis_failure()` 累计熔断计数 → DB fallback
+    - 连续 LIKE_REDIS_BREAKER_THRESHOLD 次失败 → 熔断打开
+    - LIKE_REDIS_BREAKER_RESET_SECONDS 后放行探测请求,成功则关闭熔断
+
+    ### Args:
+        db: 数据库会话
+        user_id: 当前用户 ID
+        target_id: 目标对象 ID (文章或评论)
+        target_type: 目标类型 ("article" / "comment")
+
+    ### Returns:
+        dict: {target_id, target_type, like_count, is_liked}
     """
     users_key, count_key, _, _ = _like_keys(target_id, target_type)
-    try:
-        # 确保 缓存已经预热加载
-        await _warm_like_cache(db, target_id, target_type)
-        # 使用Lua脚本 原子切换点赞状态并返回最新计数
-        result = await redis_client.eval(
-            _TOGGLE_LIKE_LUA,
-            2,
-            users_key,
-            count_key,
-            str(user_id),
+    if not _redis_breaker_allows_request():
+        is_liked, like_count = await _change_like_status_in_db_with_count(
+            db, user_id, target_id, target_type
         )
-        is_liked = bool(int(result[0]))
-        like_count = int(result[1])
-    except Exception:
-        is_liked = await change_like_status(db, user_id, target_id, target_type)
-        like_count = await _get_target_like_count(db, target_id, target_type)
         return {
             "target_id": target_id,
             "target_type": target_type,
@@ -257,15 +344,34 @@ async def change_like_status_cached(db: AsyncSession,
         }
 
     try:
-        # TODO 持久化写入数据库；第2阶段用 Redis Stream 替换
-        await append_like_event(user_id, target_id, target_type, is_liked)
+        # 确保 缓存已经预热加载
+        await _warm_like_cache(db, target_id, target_type)
+        # 使用Lua脚本 原子切换点赞状态并返回最新计数
+        result = await redis_client.eval(
+            _TOGGLE_LIKE_LUA,
+            3,
+            users_key,
+            count_key,
+            LIKE_STREAM,
+            str(user_id),
+            str(target_id),
+            target_type,
+            str(LIKE_STREAM_MAXLEN),
+        )
+        is_liked = bool(int(result[0]))
+        like_count = int(result[1])
     except Exception:
-        logger.exception("点赞状态持久化写入数据库失败,降级为db写入")
-        try: 
-            await _set_like_status_in_db(db, user_id, target_id, target_type, is_liked)
-        except Exception:
-            await db.rollback()
-            logger.exception("点赞状态持久化降级写db失败")
+        _record_redis_failure()
+        is_liked, like_count = await _change_like_status_in_db_with_count(
+            db, user_id, target_id, target_type
+        )
+        return {
+            "target_id": target_id,
+            "target_type": target_type,
+            "like_count": like_count,
+            "is_liked": is_liked,
+        }
+    _record_redis_success()
 
     return {
         "target_id": target_id,
@@ -305,7 +411,7 @@ async def get_like_status_cached(db: AsyncSession,
                                  target_type: str,
                                  like_count: int) -> dict:
     """
-    优先从 Redis Set/String 读取点赞状态，Redis 不可用时回退 DB。
+    优先从 Redis Set/String 读取点赞状态,Redis 不可用时回退 DB
     """
     users_key, count_key, _, _ = _like_keys(target_id, target_type)
     try:

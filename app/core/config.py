@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
     REDIS_SYNC_INTERVAL: int = 60 * 5
+    LIKE_STREAM_IN_PROCESS: bool = True
 
     # Railway 注入 postgresql:// → 自动转异步驱动
     def __init__(self, **kwargs):
@@ -72,5 +73,4 @@ class Settings(BaseSettings):
 
 # 实例化配置对象
 settings = Settings()
-
 

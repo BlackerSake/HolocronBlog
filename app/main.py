@@ -16,7 +16,7 @@ from app.routers import profile
 from app.core.exceptions import register_exception_handlers
 from starlette.middleware.base import BaseHTTPMiddleware
 from app.middleware.rate_limit import rate_limit_middleware
-from app.core.redis import start_sync_task, stop_sync_task, redis_client
+from app.core.redis import start_sync_task, stop_sync_task
 from app.core.seed import seed_default_roles
 from app.core.like_stream import start_like_stream_task, stop_like_stream_task
 log_dir = os.path.join(os.path.dirname(__file__), "..", "logs")
@@ -35,12 +35,13 @@ async def lifespan(app: FastAPI):
     """FastAPI 生命周期, 由 Alembic 管理建表"""
     await seed_default_roles()
     await start_sync_task()
-    await start_like_stream_task()
+    if settings.LIKE_STREAM_IN_PROCESS:
+        await start_like_stream_task()
 
     yield # 应用运行期间
     
-    await stop_like_stream_task()
-    await redis_client.close()
+    if settings.LIKE_STREAM_IN_PROCESS:
+        await stop_like_stream_task()
     await stop_sync_task()
     await engine.dispose() # 关闭数据库连接, 相当于@app.on_event("shutdown")
 
@@ -83,11 +84,9 @@ async def root():
     return {"message":"This is my blog"}
 
 @app.get("/health/db")
-async def health_db(db: AsyncSession = Depends(get_db)): #Denpends 依赖注入
+async def health_db(db: AsyncSession = Depends(get_db)):
     """检查数据库连接健康"""
-    # 执行一个查询: SELECT 1 用ORM 的select() 方法
     result = await db.execute(select(1))
-    # bug-3 注入类型不对, 需要用text()包装,不能执行写裸的sql 
     return {"status":"ok",
             "result":result.scalar()}
 
@@ -95,5 +94,3 @@ async def health_db(db: AsyncSession = Depends(get_db)): #Denpends 依赖注入
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8848, reload=True)
-
-

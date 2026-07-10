@@ -32,6 +32,7 @@ class FakeLikeRedis:
     def __init__(self):
         self.strings = {}
         self.sets = {}
+        self.streams = {}
 
     async def exists(self, key):
         return int(key in self.strings or key in self.sets)
@@ -47,6 +48,9 @@ class FakeLikeRedis:
         self.sets.pop(key, None)
         return 1
 
+    async def expire(self, key, seconds):
+        return int(key in self.strings or key in self.sets)
+
     async def sadd(self, key, *values):
         bucket = self.sets.setdefault(key, set())
         before = len(bucket)
@@ -60,19 +64,41 @@ class FakeLikeRedis:
         return self.strings.get(key)
 
     async def eval(self, script, numkeys, *values):
-        users_key, count_key = values[:numkeys]
+        users_key, count_key = values[:2]
+        stream_key = values[2] if numkeys >= 3 else None
         user_id = str(values[numkeys])
+        target_id = str(values[numkeys + 1]) if len(values) > numkeys + 1 else ""
+        target_type = str(values[numkeys + 2]) if len(values) > numkeys + 2 else ""
         users = self.sets.setdefault(users_key, set())
         count = int(self.strings.get(count_key, "0"))
         if user_id in users:
             users.remove(user_id)
             count = max(count - 1, 0)
             self.strings[count_key] = str(count)
-            return [0, count]
-        users.add(user_id)
-        count += 1
-        self.strings[count_key] = str(count)
-        return [1, count]
+            is_liked = 0
+        else:
+            users.add(user_id)
+            count += 1
+            self.strings[count_key] = str(count)
+            is_liked = 1
+        event_id = None
+        if stream_key:
+            event_id = await self.xadd(stream_key, {
+                "user_id": user_id,
+                "target_id": target_id,
+                "target_type": target_type,
+                "is_liked": is_liked,
+            })
+        return [is_liked, count, event_id]
+
+    async def xadd(self, key, fields, maxlen=None, approximate=True):
+        stream = self.streams.setdefault(key, [])
+        message_id = f"{len(stream) + 1}-0"
+        stream.append((message_id, {k: str(v) for k, v in fields.items()}))
+        return message_id
+
+    async def xack(self, key, group, *ids):
+        return len(ids)
 
 @pytest.fixture(scope="session")
 def event_loop():
@@ -129,8 +155,10 @@ def mock_redis():
     svc.cache_user_permissions = AsyncMock()
     svc.delete_user_permissions = AsyncMock()
     import app.services.like_service as like_svc
+    import app.core.like_stream as like_stream
     fake_like_redis = FakeLikeRedis()
     like_svc.redis_client = fake_like_redis
+    like_stream.redis_client = fake_like_redis
     # 各路由模块在 import 时已拿到原始函数引用，需在自身命名空间也 mock
     import app.routers.admin as admin_mod
     admin_mod.delete_user_permissions = AsyncMock()
