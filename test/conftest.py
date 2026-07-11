@@ -25,7 +25,7 @@ from app.models.permission import Permission
 from app.core.permissions import ALL_PERMISSIONS, DEFAULT_ROLES
 from app.services.permission_service import get_cached_permissions, cache_user_permissions
 
-# ── 基础设施 ──
+# 基础设施
 
 
 class FakeLikeRedis:
@@ -99,6 +99,22 @@ class FakeLikeRedis:
 
     async def xack(self, key, group, *ids):
         return len(ids)
+    async def publish(self, channel, message):
+        return 0
+    
+    def pubsub(self):
+        class FakePubSub:
+            async def psubscribe(self, *patterns):
+                return None
+            async def punsubscribe(self, *patterns):
+                return None
+            async def close(self):
+                return None
+            async def listen(self):
+                if False:
+                    yield None
+                return
+        return FakePubSub()
 
 @pytest.fixture(scope="session")
 def event_loop():
@@ -116,7 +132,7 @@ async def client():
         yield ac
 
 
-# ── DB ──
+# DB
 
 _test_db_fd, _test_db_path = tempfile.mkstemp(suffix="_holocron_test.db")
 os.close(_test_db_fd)
@@ -171,7 +187,7 @@ async def db_session():
         yield session
 
 
-# ── 角色 & 权限 ──
+# 角色 & 权限
 
 @pytest_asyncio.fixture(autouse=True)
 async def seed_roles(db_session: AsyncSession):
@@ -206,7 +222,7 @@ async def seed_roles(db_session: AsyncSession):
     await db_session.commit()
 
 
-# ── 用户 ──
+# 用户
 
 @pytest_asyncio.fixture
 async def test_user(db_session: AsyncSession) -> User:
@@ -280,7 +296,7 @@ async def admin_headers(admin_token: str) -> dict[str, str]:
     """管理员的认证请求头"""
     return {"Authorization": f"Bearer {admin_token}"}
 
-# ── 分类 & 标签 (给 article 用) ──
+# 分类 & 标签 (给 article 用)
 
 from app.models.category import Category
 from app.models.tag import Tag
@@ -304,7 +320,7 @@ async def tag(db_session: AsyncSession) -> Tag:
     return t
 
 
-# ── 文章 ──
+# 文章
 
 from app.models.article import Article
 
@@ -363,7 +379,7 @@ async def draft_article(db_session, test_user, category):
     return article
 
 
-# ── 评论 ──
+# 评论
 
 from app.models.comment import Comment
 

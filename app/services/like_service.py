@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import suppress
 import logging
 import time
 from sqlalchemy import and_, exists, func, or_, select, update
@@ -46,10 +47,13 @@ LIKE_INIT_WAIT_TIMES = 5             # 自旋等待次数
 LIKE_INIT_WAIT_SECONDS = 0.02        # 单次自旋间隔 (20ms)
 LIKE_REDIS_BREAKER_THRESHOLD = 5     # 连续 5 次 Redis 失败 → 熔断打开
 LIKE_REDIS_BREAKER_RESET_SECONDS = 30  # 熔断后 30 秒进入半开状态,放行探测请求
+LIKE_WARM_CHANNEL_PREFIX = "like:warmed"
+LIKE_WARM_WAIT_SECONDS = 1.0
 
 _redis_failure_count = 0
 _redis_breaker_opened_at = 0.0
-
+_warm_events: dict[str, asyncio.Event] = {}
+_warm_listener_task: asyncio.Task | None = None
 
 class LikeCacheWarmupError(RuntimeError):
     """点赞缓存预热未完成,调用方应 fail-fast 并降级到 DB 路径"""
@@ -103,6 +107,66 @@ def _like_keys(target_id: int, target_type: str) -> tuple[str, str, str, str]:
         f"{base}:loaded",
         f"{base}:init_lock",
     )
+def _like_warm_channel(target_id: int, target_type: str) -> str:
+    """生成点赞缓存预热完成事件的 Pub/Sub 频道"""
+    return f"{LIKE_WARM_CHANNEL_PREFIX}:{target_id}:{target_type}"
+def _get_warm_event(channel: str) -> asyncio.Event:
+    """获取当前worker内某个预热频道对应的本地event"""
+    event = _warm_events.get(channel)
+    if event is None:
+        event = asyncio.Event()
+        _warm_events[channel] = event
+    return event
+
+async def _publish_like_warmed(target_id: int, target_type: str) -> None:
+    """广播某个点赞缓存key已经完成预热,唤醒其他worker的等待协程"""
+    channel = _like_warm_channel(target_id, target_type)
+    _get_warm_event(channel).set()
+    await redis_client.publish(channel, "1")
+
+async def _like_warm_pubsub_loop() -> None:
+    """
+    ## 监听 Redis Pub/Sub 预热完成事件,并唤醒当前worker内的等待协程
+    尝试监听所有频道,若当前worker内没有对应的预热事件则创建一个
+    """
+    pubsub = redis_client.pubsub()
+    await pubsub.subscribe(f"{LIKE_WARM_CHANNEL_PREFIX}:*")
+    
+    try:
+        async for message in pubsub.listen():
+            if message.get("type") != "pmessage":
+                continue
+            channel = message["channel"]
+            # 若当前worker内没有对应的预热事件则创建一个
+            if isinstance(channel, bytes):
+                channel = channel.decode()
+            _get_warm_event(channel).set()
+    except asyncio.CancelledError:
+        raise
+    finally: # 确保退出时取消订阅:finally块确保执行
+        with suppress(Exception): # 抑制异常并执行接下来的语句
+            await pubsub.punsubscribe(f"{LIKE_WARM_CHANNEL_PREFIX}:*") # 取消订阅
+        with suppress(Exception):
+            await pubsub.close()
+
+async def start_like_warm_listener() -> None:
+    """启动当前worker内的点赞预热 pub/sub 监听"""
+    global _warm_listener_task
+    # 如果监听任务已存在且未完成,则不重复启动
+    if _warm_listener_task and not _warm_listener_task.done():
+        return
+    _warm_listener_task = asyncio.create_task(_like_warm_pubsub_loop())
+
+async def stop_like_warm_listener() -> None:
+    """停止当前worker内的点赞预热 pub/sub 监听"""
+    global _warm_listener_task
+    if not _warm_listener_task:
+        return
+    
+    _warm_listener_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await _warm_listener_task
+    _warm_listener_task = None
 
 
 async def _get_target_like_count(db: AsyncSession, target_id: int, target_type: str) -> int:
@@ -124,9 +188,9 @@ async def _get_target_like_count(db: AsyncSession, target_id: int, target_type: 
 async def _warm_like_cache(db: AsyncSession, target_id: int, target_type: str) -> None:
     """
     ## 缓存预热(懒加载 + 分布式锁防止缓存击穿)
-    ### 分布式做 + 自旋等待
+    ### 分布式锁 + Pub/Sub 广播
     - 第一个拿到锁的请求去 查db 并写入缓存
-    - 其他请求自旋等待,等锁释放后直接读取缓存
+    - 其他请求等待redis Pub/Sub广播,等锁释放后直接读取缓存
     - 自旋超时未就绪则抛出 LikeCacheWarmupError,调用方降级到 DB 路径
     - 缓存 TTL: LIKE_CACHE_TTL (30 分钟),loaded / count / users 统一过期
     Args:
@@ -143,19 +207,21 @@ async def _warm_like_cache(db: AsyncSession, target_id: int, target_type: str) -
     # NX:只有键不存在时才设置成功. 用以保证互斥
     # EX: 锁过期时间 LIKE_INIT_LOCK_TTL 秒,防止死锁. 二者结合保证进程崩了,锁自动释放,
     if not locked:
-        # 没抢到锁,即锁其他进程抢占. 短暂自旋等待,等待其他进程预热完  
+        # 没抢到锁,即锁其他进程抢占. 等待redis Pub/Sub广播 避免自旋轮询
+        channel = _like_warm_channel(target_id, target_type)
+        event = _get_warm_event(channel)
 
-        for _ in range(LIKE_INIT_WAIT_TIMES):
-            await asyncio.sleep(LIKE_INIT_WAIT_SECONDS)
-            if await redis_client.exists(loaded_key):
-                return
+        try:
+            await asyncio.wait_for(event.wait(),timeout=LIKE_WARM_WAIT_SECONDS)
+        except asyncio.TimeoutError:
+            pass
+        if await redis_client.exists(loaded_key):
+            return
         # 还没预热完毕,抛出异常让上层降级到 DB 路径
-        raise LikeCacheWarmupError(f"like cache warm-up timeout: {target_type}:{target_id}")
+        raise LikeCacheWarmupError(f"攒点缓存预热失败: {target_type}:{target_id}")
     """
-    TODO 缓存预热
-    可以升级为redis分布式锁 + 双重锁检查: 自旋退出之前再做一次existing检查
-    还可以不做自旋,自旋会在asyncio里阻塞事件循环,虽然有sleep让出,但是盲等可优化
-    故引入**本地缓存 + Redis Pub/Sub缓存失效广播**:对于每个worker维护一个asyncio.Event
+    缓存预热
+    故引入**Redis Pub/Sub缓存失效广播**:对于每个worker维护一个asyncio.Event
     预热完成之后publish 事件like:warmed:{target_id} 其他的worker通过Pub/Sub广播唤醒,无需自旋轮询
     """
 
@@ -179,6 +245,7 @@ async def _warm_like_cache(db: AsyncSession, target_id: int, target_type: str) -
         await redis_client.expire(users_key, LIKE_CACHE_TTL)
         await redis_client.set(count_key, len(user_ids), ex=LIKE_CACHE_TTL)    # 计数
         await redis_client.set(loaded_key, "1", ex=LIKE_CACHE_TTL)     # 标记已加载
+        await _publish_like_warmed(target_id, target_type)
     finally:
         await redis_client.delete(lock_key)
 

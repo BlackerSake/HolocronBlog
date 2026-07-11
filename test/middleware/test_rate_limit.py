@@ -4,8 +4,7 @@ from unittest.mock import AsyncMock, patch
 from httpx import ASGITransport, AsyncClient
 from fastapi import FastAPI
 
-from app.middleware.rate_limit import _get_client_ip
-
+from app.middleware.rate_limit import _get_client_ip, _get_token_bucket
 
 class TestClientIp:
     """IP 提取逻辑"""
@@ -79,3 +78,21 @@ class TestMiddlewarePassthrough:
             for _ in range(5):
                 resp = await client.get("/ping")
                 assert resp.status_code == 200
+    
+    async def test_token_bucket_rejects(self, client: AsyncClient):
+        """token butcket 不足时返回429"""
+        with patch("app.middleware.rate_limit.redis_client") as m:
+            m.eval = AsyncMock(return_value=[0, 2])
+            resp = await client.get("/ping")
+        assert resp.status_code == 429
+        assert resp.headers["Retry-After"] == '2'
+
+class TestTokenBucketConfig:
+    """令牌桶配置"""
+    def test_login_bucket(self):
+        """登录接口的小brust"""
+        assert _get_token_bucket("/api/v1/login") == (5, 5 / 60)
+    
+    def test_default_bucket(self):
+        """其他接口的默认brust"""
+        assert _get_token_bucket("/articles/a/like") == (20, 1.0)
