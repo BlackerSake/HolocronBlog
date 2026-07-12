@@ -11,6 +11,10 @@ from app.services.article_service import (
     create_article as svc_create_article,
     update_article as svc_update_article,
 )
+from app.services.article_cache_service import (
+    get_public_article_cached,
+    invalidate_article_cache,
+)
 from app.core.log import log_call
 from app.core.redis import redis_client
 import json
@@ -171,8 +175,8 @@ async def get_article(slug: str, db: AsyncSession = Depends(get_db)):
     Raises:
         HTTPException 404: 文章不存在或未发布
     """
-    article = await get_article_by_slug(db, slug)
-    if not article or not article.is_published:
+    article = await get_public_article_cached(db, slug)
+    if not article:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail="文章不存在")
 
@@ -209,6 +213,8 @@ async def create_article(
     """
     article = await svc_create_article(db, article_in, current_user.id)
     article = await get_article_by_slug(db, article.slug)
+    assert article is not None # 使Pylance窄化类型,原返回为 Aticle | None
+    await invalidate_article_cache(article.slug)
     return Response(data=article)
 
 
@@ -249,8 +255,12 @@ async def update_article(
             detail="权限不足，只有作者本人可修改"
         )
 
+    old_slug = article.slug
     article = await svc_update_article(db, article, article_in)
     article = await get_article_by_slug(db, article.slug)
+    assert article is not None
+    await invalidate_article_cache(old_slug)
+    await invalidate_article_cache(article.slug)
     return Response(data=article)
 
 
@@ -291,6 +301,7 @@ async def unpublish_article(
         )
     article.is_published = False
     await db.commit()
+    await invalidate_article_cache(slug)
     return Response(data=article)
 
 
@@ -331,4 +342,5 @@ async def delete_article(
 
     article.is_deleted = True
     await db.commit()
+    await invalidate_article_cache(slug)
     return None

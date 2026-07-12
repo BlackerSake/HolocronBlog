@@ -260,7 +260,11 @@ class TestArticleViews:
         with patch("app.routers.articles.redis_client") as mock_r:
             mock_r.incr = AsyncMock(return_value=5)
             mock_r.get = AsyncMock(return_value="5")
-            resp = await client.get("/articles/published-one")
+            with patch("app.services.article_cache_service.redis_client") as cache_r:
+                cache_r.get = AsyncMock(return_value=None)
+                cache_r.set = AsyncMock(retirn_value=True)
+                cache_r.deleta = AsyncMock()
+                resp = await client.get("/articles/published-one")
         assert resp.status_code == 200
         assert resp.json()["data"]["views"] == 5
         mock_r.incr.assert_awaited_once_with("article:views:published-one")

@@ -20,6 +20,7 @@ from app.core.redis import start_sync_task, stop_sync_task
 from app.core.seed import seed_default_roles
 from app.core.like_stream import start_like_stream_task, stop_like_stream_task
 from app.services.like_service import start_like_warm_listener, stop_like_warm_listener
+from app.core.cache_rebuild import start_cache_rebuild_task, stop_cache_rebuild_task
 log_dir = os.path.join(os.path.dirname(__file__), "..", "logs")
 os.makedirs(log_dir, exist_ok=True)
 
@@ -37,7 +38,7 @@ async def lifespan(app: FastAPI):
     await seed_default_roles()
     await start_sync_task()
     await start_like_warm_listener()
-
+    await start_cache_rebuild_task()
     if settings.LIKE_STREAM_IN_PROCESS:
         await start_like_stream_task()
 
@@ -47,6 +48,7 @@ async def lifespan(app: FastAPI):
         await stop_like_stream_task()
     await stop_sync_task()
     await stop_like_warm_listener()
+    await stop_cache_rebuild_task()
     await engine.dispose() # 关闭数据库连接, 相当于@app.on_event("shutdown")
 
 app = FastAPI(
