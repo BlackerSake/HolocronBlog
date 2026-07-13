@@ -10,7 +10,7 @@ from app.models.article import Article
 from app.models.comment import Comment
 from app.models.like import Likes
 from app.models.user import User
-
+from app.services.ranking_service import bump_article_hot_score
 logger = logging.getLogger(__name__)
 
 #  Lua 脚本原子完成: Set 切换 + Count 更新 + XADD 写入 Stream
@@ -403,6 +403,8 @@ async def change_like_status_cached(db: AsyncSession,
         is_liked, like_count = await _change_like_status_in_db_with_count(
             db, user_id, target_id, target_type
         )
+        if target_type == "article":
+            await bump_article_hot_score(target_id, like_delta=1 if is_liked else -1)
         return {
             "target_id": target_id,
             "target_type": target_type,
@@ -432,6 +434,8 @@ async def change_like_status_cached(db: AsyncSession,
         is_liked, like_count = await _change_like_status_in_db_with_count(
             db, user_id, target_id, target_type
         )
+        if target_type == "article":
+            await bump_article_hot_score(target_id, like_delta=1 if is_liked else -1)
         return {
             "target_id": target_id,
             "target_type": target_type,
@@ -439,7 +443,8 @@ async def change_like_status_cached(db: AsyncSession,
             "is_liked": is_liked,
         }
     _record_redis_success()
-
+    if target_type == "article":
+        await bump_article_hot_score(target_id, like_delta=1 if is_liked else -1)
     return {
         "target_id": target_id,
         "target_type": target_type,

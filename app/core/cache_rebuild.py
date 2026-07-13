@@ -27,7 +27,8 @@ async def rebuild_hot_article_caches(db: AsyncSession) -> int:
             Article.is_published == True,
             Article.is_deleted == False,
         )
-        .order_by(Article.view_count.desc(), Article.like_count.desc())
+        .order_by(Article.views.desc(), 
+                  Article.like_count.desc())
         .limit(CACHE_REBUILD_LIMIT)
     )
     slugs = list(rows.scalars().all())

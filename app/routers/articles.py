@@ -15,6 +15,11 @@ from app.services.article_cache_service import (
     get_public_article_cached,
     invalidate_article_cache,
 )
+from app.services.ranking_service import (
+    bump_article_hot_score,
+    get_hot_article_from_rank,
+    remove_article_from_hot_rank
+)
 from app.core.log import log_call
 from app.core.redis import redis_client
 import json
@@ -130,30 +135,13 @@ async def get_hot_articles(db: AsyncSession = Depends(get_db)):
     """
     获取热门文章排行榜
 
-    按浏览量降序取前 10 篇已发布文章，结果在 Redis 中缓存 5 分钟以减少数据库压力。
-
-    Args:
-        db: 数据库会话
-
-    Returns:
-        Response[list[ArticleListItem]] — 热门文章列表
+    不再使用普通string 缓存直接保存热门列表, 而是用redis zset维护热度排序
+    - 浏览文章: zincrby + 1
+    - 点赞文章: zincrby + 5
+    - 取消点赞: zincrby - 5  
+    读取接口时,只需取zset的article_id排名,再回溯db查询完整文章数据
     """
-    cache_key = "hot_articles"
-    try:
-        cached = await redis_client.get(cache_key)
-        if cached:
-            return Response(data=json.loads(cached))
-    except Exception:
-        pass
-
-    items, _ = await query_articles(
-        db, page=1, per_page=10, is_published=True,
-    )
-    try:
-        items_data = [i.model_dump(mode="json") for i in items]
-        await redis_client.set(cache_key, json.dumps(items_data), ex=300)
-    except Exception:
-        pass
+    items = await get_hot_article_from_rank(db, limit=10)
     return Response(data=items)
 
 
@@ -188,6 +176,8 @@ async def get_article(slug: str, db: AsyncSession = Depends(get_db)):
     except Exception:
         pass
 
+    # 浏览行为进入 zset 热榜;函数内部fail-open,不影响文章详情返回
+    await bump_article_hot_score(article.id, view_delta=1)
     return Response(data=article)
 
 
@@ -301,6 +291,7 @@ async def unpublish_article(
         )
     article.is_published = False
     await db.commit()
+    await remove_article_from_hot_rank(article.id)
     await invalidate_article_cache(slug)
     return Response(data=article)
 
@@ -342,5 +333,6 @@ async def delete_article(
 
     article.is_deleted = True
     await db.commit()
+    await remove_article_from_hot_rank(article.id)
     await invalidate_article_cache(slug)
     return None

@@ -4,14 +4,15 @@ import asyncio
 from contextlib import suppress
 import random
 
-from httpx import delete
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis import redis_client
 from app.schemas.article import ArticleOut
 from app.services.article_service import get_published_article_by_slug
+from app.services.ranking_service import ARTICLE_HOT_CACHE_KEY
 
+ARTICLE_HOT_CACHE_KEY = 'cache:articles:hot'
 ARTICLE_CACHE_PREFIX = "cache:article:detail"
 ARTICLE_CACHE_LOCK_PREFIX = "lock:cache:article:detail"
 ARTICLE_CACHE_NULL = "__NULL__"
@@ -56,7 +57,12 @@ async def get_cached_article(slug: str) -> tuple[bool, ArticleOut | None]:
         return False, None
 
 async def set_article_cache(slug: str, article: ArticleOut | None) -> ArticleOut | None:
-    """写入文章详情缓存; None使用短TTL空值缓存防穿透"""
+    """
+    ## 写入文章详情缓存
+    缓存治理点:  
+    - article is None: 写入短ttl空值缓存,拦截缓存穿透
+    - article exists: 写入正常详情缓存, ttl增加随机偏移避免缓存雪崩
+    """
     cache_key = _article_detail_cache_key(slug)
     if article is None:
         await redis_client.set(cache_key, ARTICLE_CACHE_NULL, ex=ARTICLE_NULL_CACHE_TTL)
@@ -64,7 +70,7 @@ async def set_article_cache(slug: str, article: ArticleOut | None) -> ArticleOut
     
     data = ArticleOut.model_validate(article) # 缓存文章详细
     await redis_client.set(cache_key, data.model_dump_json(), ex=_article_cache_ttl())
-
+    return data
 async def rebuild_article_cache(db: AsyncSession, slug: str) -> ArticleOut | None:
     """从db重建文章详情缓存"""
     article = await get_published_article_by_slug(db, slug)
@@ -120,7 +126,8 @@ async def invalidate_article_cache(slug: str) -> None:
         await redis_client.delete(
             _article_detail_cache_key(slug),
             _article_detail_lock_key(slug),
-            "hot_articles"
+            "hot_articles", # 兼容旧缓存key
+            ARTICLE_HOT_CACHE_KEY # 新 zset榜单的短ttl列表缓存
         )
 
 async def rebuild_article_cache_batch(db: AsyncSession, slugs: list[str]) -> int:
