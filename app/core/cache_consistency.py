@@ -77,10 +77,10 @@ async def reconcile_article_view_counts(db: AsyncSession) -> int:
             .values(views=redis_views)
         )
         fixed += 1
-        logger.warning("文章浏览量对账修复 slug=%s db_views=%s redis_views=%s", 
+        logger.warning("文章浏览量对账修复 slug=%s db_views=%s redis_views=%s",
                        slug, db_views, redis_views)
 
-        return fixed
+    return fixed
 
 async def reconcile_like_counts(db: AsyncSession) -> int:
     """

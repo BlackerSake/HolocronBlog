@@ -33,6 +33,7 @@ class FakeLikeRedis:
         self.strings = {}
         self.sets = {}
         self.streams = {}
+        self.zsets = {}
 
     async def exists(self, key):
         return int(key in self.strings or key in self.sets)
@@ -43,10 +44,12 @@ class FakeLikeRedis:
         self.strings[key] = str(value)
         return True
 
-    async def delete(self, key):
-        self.strings.pop(key, None)
-        self.sets.pop(key, None)
-        return 1
+    async def delete(self, *keys):
+        for key in keys:
+            self.strings.pop(key, None)
+            self.sets.pop(key, None)
+            self.zsets.pop(key, None)
+        return len(keys)
 
     async def expire(self, key, seconds):
         return int(key in self.strings or key in self.sets)
@@ -115,6 +118,42 @@ class FakeLikeRedis:
                     yield None
                 return
         return FakePubSub()
+    
+    async def zincrby(self, key, amount, member):
+        zset = self.zsets.setdefault(key, {})
+        member = str(member)
+        zset[member] = float(zset.get(member, 0)) + float(amount)
+        return zset[member]
+    
+    async def zadd(self, key, mapping):
+        zset = self.zsets.setdefault(key, {})
+        for member, score in mapping.items():
+            zset[str(member)] = float(score)
+        return len(mapping)
+    
+    async def zrevrange(self, key, start, end):
+        items = sorted(
+            self.zsets.get(key, {}).items(),
+            key=lambda item: item[1],
+            reverse=True
+        )
+        if end == -1:
+            sliced = items[start:]
+        else:
+            sliced = items[start: end + 1]
+        return [member for member, _ in sliced]
+    
+    async def zrem(self, key, *members):
+        zset = self.zsets.setdefault(key, {})
+        removed = 0
+        for member in members:
+            removed += int(zset.pop(str(member), None) is not None)
+        return removed
+
+    async def scan(self, cursor=0, match=None, count=100):
+        import fnmatch
+        keys = [k for k in self.strings if match is None or fnmatch.fnmatch(k, match)]
+        return (0, keys)
 
 @pytest.fixture(scope="session")
 def event_loop():
@@ -178,6 +217,12 @@ def mock_redis():
     # 各路由模块在 import 时已拿到原始函数引用，需在自身命名空间也 mock
     import app.routers.admin as admin_mod
     admin_mod.delete_user_permissions = AsyncMock()
+
+    import app.services.ranking_service as ranking_svc
+    ranking_svc.redis_client = fake_like_redis
+
+    import app.core.cache_consistency as cache_consistency
+    cache_consistency.redis_client = fake_like_redis
     return fake_like_redis
 
 
