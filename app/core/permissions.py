@@ -66,6 +66,7 @@ AUTHOR_PERMISSIONS: set[str] = {
 用户: 评论创建,上传文件
 """
 USER_PERMISSIONS: set[str] = {
+    ARTICLE_CREATE,
     COMMENT_CREATE,
     UPLOAD_CREATE,
 }

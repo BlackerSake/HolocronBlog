@@ -1,6 +1,6 @@
 <template>
   <div class="profile-page container-narrow">
-    <router-link to="/" class="nav-link" style="display:inline-block;margin:2rem 0 1rem;">&larr; 返回档案馆</router-link>
+    <router-link to="/" class="nav-link" style="display:inline-block;margin:2rem 0 1rem;">&larr; 返回论坛</router-link>
 
     <div v-if="loading" class="loading">加载中<span class="dots"><span>.</span><span>.</span><span>.</span></span></div>
     <div v-else-if="!profile" class="empty-state">未找到该用户。</div>

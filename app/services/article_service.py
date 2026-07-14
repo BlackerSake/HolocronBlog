@@ -7,6 +7,7 @@ import mistune
 
 from app.core.config import settings
 from app.models.article import Article
+from app.models.comment import Comment
 from app.models.tag import Tag
 from app.schemas.article import ArticleCreate, ArticleUpdate, ArticleListItem
 
@@ -154,7 +155,7 @@ async def query_articles(
     if category_id:
         query = query.where(Article.category_id == category_id)
     if tag_id:
-        query = query.where(Tag.id == tag_id)
+        query = query.where(Article.tags.any(Tag.id == tag_id))
     if search:
         query = query.where(or_(
             Article.title.ilike(f"%{search}%"),
@@ -174,7 +175,21 @@ async def query_articles(
     )
 
     result = await db.execute(query)
-    items = [ArticleListItem.model_validate(a) for a in result.scalars().all()]
+    articles = list(result.scalars().all())
+    article_ids = [article.id for article in articles]
+    reply_counts = {}
+    if article_ids:
+        rows = await db.execute(
+            select(Comment.article_id, func.count(Comment.id))
+            .where(Comment.article_id.in_(article_ids), Comment.is_deleted == False)
+            .group_by(Comment.article_id)
+        )
+        reply_counts = dict(rows.all())
+
+    items = []
+    for article in articles:
+        article.reply_count = reply_counts.get(article.id, 0)
+        items.append(ArticleListItem.model_validate(article))
     return items, total
 
 
@@ -254,7 +269,5 @@ async def update_article(
     article.updated_at = datetime.now(settings.tz)
     await db.commit()
     return article
-
-
 
 

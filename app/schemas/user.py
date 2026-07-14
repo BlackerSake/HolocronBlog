@@ -16,6 +16,9 @@ class UserOut(BaseModel):
     role: str
     email: str
     is_active: bool
+    nickname: str | None = None
+    avatar: str | None = None
+    bio: str | None = None
     created_at: datetime
 
     class Config:

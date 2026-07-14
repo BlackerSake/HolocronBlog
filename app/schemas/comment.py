@@ -40,6 +40,7 @@ class CommentOut(BaseModel):
     created_at: datetime
     is_deleted: bool = False
     is_published: bool = False # 默认为编辑
+    like_count: int = 0
     replies: list["CommentOut"] = [] # 子评论列表,自引用
 
     model_config = ConfigDict(from_attributes=True) # 允许从ORM模型创建

@@ -286,8 +286,11 @@ class TestHotArticles:
 
     async def test_cache_miss_queries_db(self, client: AsyncClient):
         """redis 无缓存 -> 查 DB"""
-        with patch("app.routers.articles.redis_client") as m:
+        with patch("app.services.ranking_service.redis_client") as m:
             m.get = AsyncMock(return_value=None)
+            m.zrevrange = AsyncMock(return_value=[])
+            m.set = AsyncMock()
+            m.zadd = AsyncMock()
             resp = await client.get("/articles/hot")
         assert resp.status_code == 200
         assert len(resp.json()["data"]) > 0
@@ -295,7 +298,7 @@ class TestHotArticles:
     async def test_cache_hit_returns_cached(self, client: AsyncClient):
         """redis 有缓存 -> 直接返回"""
         cached = '[{"id":99,"title":"cached","slug":"cached","summary":"s","is_published":true,"created_at":"2026-01-01T00:00:00Z","updated_at":null,"author":{"id":1,"username":"testuser","role":"user","email":"testuser@example.com","is_active":true,"created_at":"2026-01-01T00:00:00Z"},"category":null,"tags":[],"cover_image":null}]'
-        with patch("app.routers.articles.redis_client") as m:
+        with patch("app.services.ranking_service.redis_client") as m:
             m.get = AsyncMock(return_value=cached)
             resp = await client.get("/articles/hot")
         assert resp.status_code == 200
@@ -303,7 +306,10 @@ class TestHotArticles:
 
     async def test_no_auth_required(self, client: AsyncClient):
         """不需要认证"""
-        with patch("app.routers.articles.redis_client") as m:
+        with patch("app.services.ranking_service.redis_client") as m:
             m.get = AsyncMock(return_value=None)
+            m.zrevrange = AsyncMock(return_value=[])
+            m.set = AsyncMock()
+            m.zadd = AsyncMock()
             resp = await client.get("/articles/hot")
         assert resp.status_code == 200

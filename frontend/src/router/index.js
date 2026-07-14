@@ -1,5 +1,6 @@
 import Home from '../views/Home.vue'
 import ArticleDetail from '../views/ArticleDetail.vue'
+import TopicEditor from '../views/TopicEditor.vue'
 import Login from '../views/Login.vue'
 import Notifications from '../views/Notifications.vue'
 import Profile from '../views/Profile.vue'
@@ -14,6 +15,7 @@ import { useAuth } from '../composables/useAuth.js'
 export const routes = [
   { path: '/', name: 'home', component: Home },
   { path: '/articles/:slug', name: 'article', component: ArticleDetail },
+  { path: '/topics/new', name: 'topic-new', component: TopicEditor, meta: { requiresAuth: true } },
   { path: '/login', name: 'login', component: Login },
   { path: '/notifications', name: 'notifications', component: Notifications, meta: { requiresAuth: true } },
   { path: '/me/profile', name: 'my-profile', component: Profile, meta: { requiresAuth: true } },

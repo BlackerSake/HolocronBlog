@@ -41,6 +41,7 @@ class ArticleOut(BaseModel):
     category: CategoryOut | None
     tags: list[TagOut] = []
     views: int = 0
+    like_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -57,5 +58,8 @@ class ArticleListItem(BaseModel):
     author: UserOut
     category: CategoryOut | None
     tags: list[TagOut] = []
+    views: int = 0
+    like_count: int = 0
+    reply_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)

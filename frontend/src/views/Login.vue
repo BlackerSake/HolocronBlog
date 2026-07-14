@@ -4,7 +4,7 @@
       <div class="login-header">
         <span class="logo-icon" style="font-size:1.5rem;">◇</span>
         <h1 class="login-title">{{ isRegister ? '注册账号' : '登录账号' }}</h1>
-        <p class="login-subtitle">{{ isRegister ? '创建账号以管理内容' : '验证身份以进入管理后台' }}</p>
+        <p class="login-subtitle">{{ isRegister ? '创建账号以参与讨论' : '登录后可发帖和回复' }}</p>
       </div>
 
       <form @submit.prevent="handleSubmit">
@@ -22,7 +22,7 @@
         </div>
         <p v-if="error" style="color:var(--danger);font-size:0.82rem;margin-bottom:1rem;">{{ error }}</p>
         <button type="submit" class="btn btn-primary" style="width:100%;" :disabled="loading">
-          {{ loading ? '处理中...' : (isRegister ? '注册并进入' : '进入Holocron') }}
+          {{ loading ? '处理中...' : (isRegister ? '注册并登录' : '登录') }}
         </button>
       </form>
 
@@ -64,7 +64,7 @@ async function handleSubmit() {
       await auth.register(username.value, email.value, password.value)
     }
     await auth.login(username.value, password.value)
-    router.push(route.query.redirect || '/backend')
+    router.push(route.query.redirect || '/')
   } catch (e) {
     error.value = e.response?.data?.message || e.response?.data?.detail || (isRegister.value ? '注册失败' : '登录失败')
   } finally {

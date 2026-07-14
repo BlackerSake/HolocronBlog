@@ -4,7 +4,7 @@
     <div class="comment-body">
       <div class="comment-meta">
         <span class="comment-author">{{ comment.author?.username }}</span>
-        <span class="comment-time">{{ formatTime(comment.created_at) }}</span>
+        <span class="comment-time">{{ formatRelativeTime(comment.created_at) }}</span>
         <span v-if="comment.is_deleted" class="deleted-badge">已删除</span>
       </div>
       <div class="comment-content">
@@ -49,6 +49,7 @@ import { ref, computed, nextTick, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { commentsAPI, likesAPI } from '../api/index.js'
 import { useAuth } from '../composables/useAuth.js'
+import { formatRelativeTime } from '../utils.js'
 
 const props = defineProps({
   comment: Object,
@@ -84,16 +85,6 @@ const canDelete = computed(() => {
   if (!u) return false
   return u.role_name === 'admin' || props.comment.author?.id === u.id
 })
-
-function formatTime(d) {
-  if (!d) return ''
-  const date = new Date(d)
-  const now = new Date()
-  const diff = now - date
-  if (diff < 3600000) return `${Math.floor(diff / 60000)} 分钟前`
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)} 小时前`
-  return date.toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai', month: 'short', day: 'numeric' })
-}
 
 function openReply() {
   showReply.value = true
@@ -155,30 +146,29 @@ onMounted(() => {
 </script>
 
 <style>
-.comment-item { display: flex; gap: 0.75rem; margin-bottom: 0.75rem; padding: 0.7rem; border: 1px solid transparent; border-radius: var(--radius); transition: background var(--transition), border-color var(--transition), box-shadow var(--transition), transform var(--transition); animation: fadeUp 0.32s ease both; }
-.comment-item:hover { background: rgba(255,255,255,0.72); border-color: rgba(15, 143, 134, 0.12); box-shadow: var(--shadow-sm); transform: translateY(-1px); }
-.comment-avatar { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg, var(--teal), var(--violet)); color: #fff; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 0.8rem; font-weight: 600; flex-shrink: 0; box-shadow: 0 8px 18px rgba(15, 143, 134, 0.16); }
-.comment-avatar.small { width: 28px; height: 28px; font-size: 0.7rem; }
+.comment-item { display: flex; gap: 12px; padding: 16px; border-top: 1px solid var(--border-light); }
+.comment-list > .comment-item:first-child { border-top: 0; }
+.comment-avatar { width: 34px; height: 34px; border-radius: 7px; background: var(--green); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 0.82rem; font-weight: 700; flex-shrink: 0; }
+.comment-avatar.small { width: 28px; height: 28px; font-size: 0.72rem; }
 .comment-body { flex: 1; min-width: 0; }
-.comment-meta { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.2rem; flex-wrap: wrap; }
-.comment-author { font-family: var(--font-mono); font-size: 0.78rem; font-weight: 600; color: var(--text-primary); }
-.comment-time { font-size: 0.68rem; color: var(--text-muted); font-family: var(--font-mono); }
-.deleted-badge { font-size: 0.65rem; color: var(--text-muted); font-family: var(--font-mono); border: 1px solid var(--border-light); padding: 0 0.35rem; border-radius: 3px; }
-.comment-content { font-size: 0.92rem; line-height: 1.65; color: var(--text-primary); word-break: break-word; }
-.reply-at { color: var(--teal); font-size: 0.85rem; }
-.comment-actions { margin-top: 0.5rem; display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
-.action-btn { background: none; border: none; font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); cursor: pointer; padding: 0.2rem 0.35rem; border-radius: 999px; transition: background var(--transition), color var(--transition), transform var(--transition); }
-.action-btn:hover { color: var(--teal); background: var(--teal-bg); transform: translateY(-1px); }
-.action-btn.active { color: var(--teal); background: var(--teal-bg); }
-.comment-like-btn { display: inline-flex; align-items: center; gap: 0.25rem; }
+.comment-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap; }
+.comment-author { font-size: 0.86rem; font-weight: 700; color: var(--text-primary); }
+.comment-time { font-size: 0.76rem; color: var(--text-muted); }
+.deleted-badge { font-size: 0.72rem; color: var(--text-muted); border: 1px solid var(--border-light); padding: 0 6px; border-radius: 3px; }
+.comment-content { font-size: 0.94rem; line-height: 1.7; color: var(--text-primary); word-break: break-word; }
+.reply-at { color: var(--blue); font-size: 0.88rem; }
+.comment-actions { margin-top: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.action-btn { background: none; border: 0; font-size: 0.78rem; color: var(--text-muted); cursor: pointer; padding: 2px 6px; border-radius: 999px; }
+.action-btn:hover,
+.action-btn.active { color: var(--blue); background: #edf3f8; }
+.comment-like-btn { display: inline-flex; align-items: center; gap: 4px; }
 .comment-like-icon { font-size: 0.92rem; line-height: 1; }
 .comment-like-btn.pop .comment-like-icon { animation: pop 0.26s ease; }
-.comment-like-count { color: inherit; }
-.action-danger:hover { color: var(--danger); }
-.reply-children { margin-top: 0.75rem; padding-left: 0.75rem; border-left: 1px solid var(--border-light); }
-.reply-form { margin-top: 0.65rem; display: flex; flex-direction: column; gap: 0.4rem; animation: fadeUp 0.2s ease both; }
-.comment-input { font-family: var(--font-body); font-size: 0.9rem; width: 100%; padding: 0.65rem 0.85rem; background: var(--bg-surface); border: 1px solid var(--border-light); color: var(--text-primary); border-radius: var(--radius); outline: none; transition: border-color var(--transition), box-shadow var(--transition); resize: vertical; line-height: 1.6; }
-.comment-input:focus { border-color: var(--teal); box-shadow: var(--shadow-glow); }
-.form-actions { display: flex; justify-content: space-between; align-items: center; }
-.hint { font-size: 0.68rem; color: var(--text-muted); font-family: var(--font-mono); }
+.action-danger:hover { color: var(--danger); background: var(--danger-bg); }
+.reply-children { margin-top: 12px; padding-left: 12px; border-left: 1px solid var(--border-light); }
+.reply-form { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.comment-input { font-family: var(--font-body); font-size: 0.9rem; width: 100%; padding: 0.65rem 0.85rem; background: var(--bg-surface); border: 1px solid var(--border-light); color: var(--text-primary); border-radius: var(--radius); outline: none; resize: vertical; line-height: 1.6; }
+.comment-input:focus { border-color: var(--blue); box-shadow: var(--shadow-glow); }
+.form-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.hint { font-size: 0.76rem; color: var(--text-muted); }
 </style>

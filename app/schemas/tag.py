@@ -3,6 +3,7 @@ from datetime import datetime
 
 class TagBase(BaseModel):
     """标签基础字段"""
+    name: str
 
 class TagCreate(TagBase):
     pass

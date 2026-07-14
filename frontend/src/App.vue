@@ -1,13 +1,14 @@
 <template>
   <div class="app-shell">
-    <header class="archive-header" v-if="!isAdminRoute">
+    <header class="archive-header">
       <div class="header-inner">
         <router-link to="/" class="logo">
           <span class="logo-icon">H</span>
-          <span class="logo-text">Holocron Blog</span>
+          <span class="logo-text">Holocron 论坛</span>
         </router-link>
         <nav class="header-nav">
-          <router-link to="/" class="nav-link">文章</router-link>
+          <router-link to="/" class="nav-link">论坛</router-link>
+          <router-link to="/topics/new" class="nav-link">发帖</router-link>
           <router-link v-if="auth.token.value" to="/notifications" class="nav-link notification-link">
             通知
             <span v-if="unreadCount" class="notification-badge">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
@@ -31,7 +32,7 @@
     </main>
 
     <footer class="archive-footer" v-if="!isAdminRoute">
-      <p>Holocron 档案馆 &mdash; 知识在此长存</p>
+      <p>Holocron 论坛 &mdash; 知识在此长存</p>
     </footer>
 
     <div v-if="toast.state.visible" class="toast" :class="toast.state.type" @click="toast.hide()">
