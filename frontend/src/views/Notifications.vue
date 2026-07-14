@@ -100,7 +100,8 @@ async function handleMarkRead(item) {
 async function openNotification(item) {
   if (!item.article_slug) return
   if (!item.is_read) await markRead(item.id)
-  router.push(`/articles/${item.article_slug}`)
+  const hash = item.comment_id ? `#comment-${item.comment_id}` : ''
+  router.push(`/articles/${item.article_slug}${hash}`)
 }
 
 async function handleMarkAllRead() {

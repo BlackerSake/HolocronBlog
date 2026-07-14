@@ -22,9 +22,9 @@
 
       <form v-if="showReply" class="reply-form" @submit.prevent="submitReply">
         <textarea ref="replyInput" v-model="replyText" class="comment-input" :placeholder="'回复 @' + comment.author?.username" rows="2" maxlength="2000"
-          @keydown.enter.prevent="submitReply"></textarea>
+          @keydown.enter="handleReplyEnter"></textarea>
         <div class="form-actions">
-          <span class="hint">Enter 发送</span>
+          <span class="hint">Enter 发送 · Shift+Enter 换行</span>
           <div>
             <button type="submit" class="btn btn-sm btn-primary" :disabled="!replyText.trim() || submitting">{{ submitting ? '...' : '发送' }}</button>
             <button type="button" class="btn btn-sm" @click="closeReply">取消</button>
@@ -141,6 +141,12 @@ async function submitReply() {
     emit('refresh')
   } catch (e) { /* handled globally */ }
   finally { submitting.value = false }
+}
+
+function handleReplyEnter(event) {
+  if (event.shiftKey) return
+  event.preventDefault()
+  submitReply()
 }
 
 onMounted(() => {

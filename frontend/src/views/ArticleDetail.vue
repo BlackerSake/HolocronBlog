@@ -7,6 +7,7 @@
         <router-link v-if="article.author" :to="`/users/${article.author.id}/profile`">{{ article.author.username }}</router-link>
         <span>{{ formatDate(article.created_at) }}</span>
         <span v-if="article.category">{{ article.category.name }}</span>
+        <span>{{ article.views || 0 }} 次阅读</span>
       </div>
 
       <h1 class="page-title" style="margin-bottom:0.5rem;">{{ article.title }}</h1>
@@ -16,6 +17,8 @@
         <span>{{ liked ? '已赞' : '点赞' }}</span>
         <span v-if="likeLoaded || likeCount" class="like-count">{{ likeCount }}</span>
       </button>
+
+      <img v-if="article.cover_image" class="article-cover" :src="article.cover_image" :alt="article.title" />
 
       <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:2.5rem;" v-if="article.tags?.length">
         <span class="tag-pill" v-for="t in article.tags" :key="t.id">#{{ t.name }}</span>
@@ -82,8 +85,8 @@ async function toggleLike() {
 onMounted(async () => {
   try {
     article.value = await articlesAPI.get(route.params.slug)
-    likeCount.value = article.value.like_count || 0
-    await fetchLikeStatus()
+    likeCount.value = article.value.like_count ?? 0
+    await fetchLikeStatus().catch(() => {})
   } catch { /* 404 handled by template */ }
   finally { loading.value = false }
 })
@@ -97,6 +100,17 @@ onMounted(async () => {
 
 .markdown-body {
   padding: 0.5rem 0;
+}
+
+.article-cover {
+  display: block;
+  width: 100%;
+  max-height: 360px;
+  margin: 0.5rem 0 1.5rem;
+  border-radius: var(--radius);
+  object-fit: cover;
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow-sm);
 }
 
 .like-btn {

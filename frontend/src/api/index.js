@@ -14,7 +14,7 @@ api.interceptors.response.use(
   err => {
     const detail = err.response?.data?.message || err.response?.data?.detail
     const status = err.response?.status
-    if (status === 401 && !err.config.url.includes('/login')) {
+    if (status === 401 && !err.config?.url?.includes('/login')) {
       localStorage.removeItem('token')
       localStorage.removeItem('user')
       window.location.href = '/login'
@@ -60,6 +60,9 @@ export const articlesAPI = {
 
   get: slug =>
     api.get(`/articles/${slug}`).then(unwrap),
+
+  hot: () =>
+    api.get('/articles/hot').then(unwrap),
 
   create: data =>
     api.post('/articles', data).then(unwrap),

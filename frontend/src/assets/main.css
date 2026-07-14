@@ -71,6 +71,14 @@ body::before {
 
 a { color: var(--teal); text-decoration: none; transition: color var(--transition); }
 a:hover { color: var(--teal-dark); }
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
 
 img { max-width: 100%; height: auto; }
 
@@ -266,6 +274,81 @@ img { max-width: 100%; height: auto; }
 .home-page {
   padding-top: 2.5rem;
   padding-bottom: 3rem;
+}
+
+.home-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.home-main {
+  min-width: 0;
+}
+
+.hot-panel {
+  position: sticky;
+  top: 96px;
+  padding: 1rem;
+  border: 1px solid rgba(95, 110, 103, 0.12);
+  border-radius: var(--radius);
+  background: rgba(255,255,255,0.72);
+  box-shadow: var(--shadow-sm);
+}
+
+.hot-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.hot-panel-head h2 {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.hot-panel-head span,
+.hot-empty {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.hot-item {
+  display: grid;
+  grid-template-columns: 1.5rem 1fr;
+  gap: 0.55rem;
+  padding: 0.65rem 0;
+  border-top: 1px solid var(--border-light);
+  color: var(--text-primary);
+}
+
+.hot-item:hover .hot-title {
+  color: var(--teal);
+}
+
+.hot-rank {
+  width: 1.35rem;
+  height: 1.35rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--teal-bg);
+  color: var(--teal);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+}
+
+.hot-title {
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 0.84rem;
+  line-height: 1.55;
+  transition: color var(--transition);
 }
 
 .page-header {
@@ -939,6 +1022,7 @@ label {
 .admin-content {
   flex: 1;
   padding: 2rem;
+  overflow-x: auto;
 }
 
 .toast {
@@ -1117,12 +1201,25 @@ label {
 }
 
 @media (max-width: 720px) {
+  .archive-header,
+  .header-inner {
+    height: auto;
+    min-height: 68px;
+  }
+
   .header-inner {
     padding: 0 1rem;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    justify-content: center;
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
   }
 
   .header-nav {
     gap: 0;
+    max-width: 100%;
+    overflow-x: auto;
   }
 
   .header-username {
@@ -1140,6 +1237,64 @@ label {
 
   .notification-dot {
     display: none;
+  }
+
+  .home-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .hot-panel {
+    position: static;
+    order: -1;
+  }
+
+  .admin-topbar {
+    height: auto;
+    min-height: 76px;
+    padding: 0.75rem 1rem;
+    align-items: flex-start;
+    gap: 0.75rem;
+    flex-direction: column;
+  }
+
+  .topbar-left,
+  .topbar-right {
+    width: 100%;
+    gap: 0.75rem;
+    justify-content: space-between;
+  }
+
+  .topbar-left {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .topbar-nav {
+    width: 100%;
+    height: auto;
+    overflow-x: auto;
+  }
+
+  .topbar-link {
+    height: 42px;
+    padding: 0 0.75rem;
+    white-space: nowrap;
+  }
+
+  .admin-content {
+    padding: 1rem;
+  }
+
+  .admin-table {
+    min-width: 720px;
+  }
+
+  .page-title {
+    font-size: 1.8rem;
+  }
+
+  .page-header .page-title {
+    font-size: 2rem;
   }
 }
 

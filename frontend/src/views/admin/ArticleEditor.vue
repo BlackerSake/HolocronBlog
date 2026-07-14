@@ -31,9 +31,15 @@
           <input v-model="form.summary" class="input" placeholder="简短描述..." />
         </div>
 
-        <div class="form-group">
-          <label>内容（Markdown）</label>
-          <textarea v-model="form.content" class="textarea" style="min-height:350px;font-family:var(--font-mono);font-size:0.85rem;" required></textarea>
+        <div class="editor-grid">
+          <div class="form-group">
+            <label>内容（Markdown）</label>
+            <textarea v-model="form.content" class="textarea editor-textarea" required></textarea>
+          </div>
+          <div class="form-group">
+            <label>预览</label>
+            <div class="markdown-body editor-preview" v-html="previewHtml"></div>
+          </div>
         </div>
 
         <div class="form-group">
@@ -62,6 +68,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { marked } from 'marked'
 import { articlesAPI, categoriesAPI, tagsAPI } from '../../api/index.js'
 
 const route = useRoute()
@@ -82,6 +89,8 @@ const form = ref({
   tags_id: [],
   is_published: false,
 })
+
+const previewHtml = computed(() => marked.parse(form.value.content || ''))
 
 async function handleSave() {
   error.value = ''
@@ -127,3 +136,35 @@ onMounted(async () => {
   }
 })
 </script>
+
+<style scoped>
+.editor-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.9fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.editor-textarea {
+  min-height: 420px;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+.editor-preview {
+  min-height: 420px;
+  max-height: 640px;
+  overflow: auto;
+  padding: 1rem;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+@media (max-width: 980px) {
+  .editor-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

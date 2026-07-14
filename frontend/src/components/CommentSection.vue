@@ -6,7 +6,7 @@
     </div>
     <form v-else class="comment-form" @submit.prevent="submitTopLevel">
       <textarea v-model="newComment" class="comment-input" placeholder="写下你的评论..." rows="3" maxlength="2000"
-        @keydown.enter.prevent="submitTopLevel"></textarea>
+        @keydown.enter="handleTopLevelEnter"></textarea>
       <div class="form-actions">
         <span class="hint">Enter 发送 · Shift+Enter 换行</span>
         <button type="submit" class="btn btn-sm btn-primary" :disabled="!newComment.trim() || submitting">{{ submitting ? '发送中...' : '发表评论' }}</button>
@@ -82,6 +82,12 @@ async function submitTopLevel() {
     await fetchComments()
   } catch (e) { /* handled globally */ }
   finally { submitting.value = false }
+}
+
+function handleTopLevelEnter(event) {
+  if (event.shiftKey) return
+  event.preventDefault()
+  submitTopLevel()
 }
 
 async function handleDelete(id) {
