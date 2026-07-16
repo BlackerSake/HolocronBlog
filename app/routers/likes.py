@@ -1,4 +1,7 @@
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Query
+from app.core.websocket import wbmanager
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
@@ -12,6 +15,7 @@ from app.services.like_service import (
     get_like_status_cached,
     get_user_history_likes,
 )
+from app.services.notification_service import create_notification
 
 
 router = APIRouter()
@@ -37,6 +41,21 @@ async def click_like_or_unlike_article(slug: str,
     article = await get_published_article_by_slug(db, slug)
 
     status = await change_like_status_cached(db, current_user.id, article.id, "article")
+
+    if status["is_liked"]:
+        await create_notification(
+            db,
+            initiator_id=current_user.id,
+            recipient_id=article.author_id,
+            type="like_article",
+            content="有人赞了你的文章",
+            article_id=article.id,
+        )
+    await wbmanager.send_personal_message(current_user.id, json.dumps({
+        "type": "like_changed",
+        "user_id": current_user.id,
+        **status,
+    }))
 
     return LikeStatusOut(
         target_type="article",
@@ -64,6 +83,21 @@ async def click_like_or_unlike_comment(comment_id: int,
     """
     comment = await get_comment_by_id(db, comment_id)
     status = await change_like_status_cached(db, current_user.id, comment_id, "comment")
+    if status["is_liked"]:
+        await create_notification(
+            db,
+            initiator_id=current_user.id,
+            recipient_id=comment.author_id,
+            type="like_comment",
+            content="有人赞了你的评论",
+            article_id=comment.article_id,
+            comment_id=comment.id,
+        )
+    await wbmanager.send_personal_message(current_user.id, json.dumps({
+        "type": "like_changed",
+        "user_id": current_user.id,
+        **status,
+    }))
     return LikeStatusOut(
         target_type="comment",
         target_id=comment.id,

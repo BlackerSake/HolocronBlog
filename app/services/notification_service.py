@@ -1,7 +1,8 @@
-
+import json
 
 from sqlalchemy import func, update, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.websocket import wbmanager
 from app.models.notification import Notification
 from app.models.article import Article
 
@@ -38,6 +39,10 @@ async def create_notification(db: AsyncSession,
     db.add(notification)
     await db.commit()
     await db.refresh(notification)
+    await wbmanager.send_personal_message(recipient_id, json.dumps({
+        "type": "notification_created",
+        "notification_id": notification.id,
+    }))
     return notification
 
 async def get_notifications_list(db: AsyncSession, 
@@ -75,7 +80,7 @@ async def get_notifications_list(db: AsyncSession,
 async def get_unread_notifications_count(db: AsyncSession, user_id: int) -> int:
     """获取指定用户未读通知数量
 
-    前端轮询的核心接口，通常每 30 秒调用一次以刷新未读标记。
+    前端首次连接或 WebSocket 重连时调用，用于校准未读数量。
 
     Args:
         db: 数据库会话

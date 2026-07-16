@@ -10,6 +10,8 @@ const state = reactive({
   pages: 0,
   loading: false,
 })
+let socket = null
+let reconnectTimer = null
 
 export function useNotifications() {
   async function fetchUnreadCount() {
@@ -53,6 +55,40 @@ export function useNotifications() {
     state.unreadCount = 0
   }
 
+  function disconnect() {
+    if (reconnectTimer) clearTimeout(reconnectTimer)
+    reconnectTimer = null
+    if (socket) {
+      socket.onclose = null
+      socket.close()
+    }
+    socket = null
+  }
+
+  function connect() {
+    disconnect()
+    const token = localStorage.getItem('token')
+    if (!token) return
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const connection = new WebSocket(`${protocol}//${window.location.host}/notifications/ws?token=${encodeURIComponent(token)}`)
+    socket = connection
+    connection.onopen = () => fetchUnreadCount().catch(() => {})
+    connection.onmessage = event => {
+      const message = JSON.parse(event.data)
+      if (message.type === 'notification_created') {
+        fetchUnreadCount().catch(() => {})
+        fetchList({ page: state.page, per_page: state.perPage }).catch(() => {})
+      } else if (message.type === 'like_changed') {
+        window.dispatchEvent(new CustomEvent('holocron:like-changed', { detail: message }))
+      }
+    }
+    connection.onclose = () => {
+      if (socket !== connection) return
+      socket = null
+      if (localStorage.getItem('token')) reconnectTimer = setTimeout(connect, 3000)
+    }
+  }
+
   function reset() {
     state.unreadCount = 0
     state.items = []
@@ -60,6 +96,7 @@ export function useNotifications() {
     state.page = 1
     state.pages = 0
     state.loading = false
+    disconnect()
   }
 
   return {
@@ -68,6 +105,8 @@ export function useNotifications() {
     fetchList,
     markRead,
     markAllRead,
+    connect,
+    disconnect,
     reset,
   }
 }

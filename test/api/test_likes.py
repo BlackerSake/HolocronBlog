@@ -62,7 +62,10 @@ class TestToggleLike:
         )
         assert resp2.json()["is_liked"] is False
 
-    async def test_multiple_users(self, client: AsyncClient, auth_headers, published_article, other_user):
+    async def test_multiple_users(
+        self, client: AsyncClient, auth_headers, published_article, other_user,
+        db_session,
+    ):
         """不同用户各自点赞 -> like_count 累加"""
         from app.core.security import create_access_token
         other_token = create_access_token(data={"sub": other_user.username})
@@ -78,6 +81,8 @@ class TestToggleLike:
         )
         assert resp.json()["is_liked"] is True
         assert resp.json()["like_count"] == 2
+        from app.services.notification_service import get_unread_notifications_count
+        assert await get_unread_notifications_count(db_session, published_article.author_id) == 1
 
 
 class TestLikeStatus:
@@ -150,11 +155,10 @@ class TestMeLikeHistory:
         assert resp.json() == []
 
     async def test_returns_history(self, client: AsyncClient, auth_headers, published_article, mock_redis, db_session):
-        """点赞后 -> 历史记录存在"""
+        """点赞后无需等待异步消费 -> 历史记录立即存在"""
         await client.post(
             f"/articles/{published_article.slug}/like", headers=auth_headers,
         )
-        await flush_like_stream(mock_redis, db_session)
         resp = await client.get(
             "/me/like-history", params={"target_type": "article"}, headers=auth_headers,
         )

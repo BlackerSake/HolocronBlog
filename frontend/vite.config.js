@@ -18,6 +18,7 @@ export default defineConfig({
       '/notifications': {
         target: 'http://127.0.0.1:8848',
         changeOrigin: true,
+        ws: true,
         bypass: req => req.headers.accept?.includes('text/html') ? '/index.html' : undefined
       },
       '/admin': { target: 'http://127.0.0.1:8848', changeOrigin: true },

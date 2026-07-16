@@ -233,9 +233,19 @@ function onScroll() {
   loadMoreHistory()
 }
 
+function onLikeChanged(event) {
+  if (Number(event.detail.user_id) === Number(userId.value) && activeTab.value === 'likes') {
+    refreshHistory()
+  }
+}
+
 onMounted(fetchProfile)
 onMounted(() => window.addEventListener('scroll', onScroll, { passive: true }))
-onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
+onMounted(() => window.addEventListener('holocron:like-changed', onLikeChanged))
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', onScroll)
+  window.removeEventListener('holocron:like-changed', onLikeChanged)
+})
 watch(() => route.fullPath, () => {
   activeTab.value = 'profile'
   targetType.value = ''

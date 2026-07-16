@@ -66,32 +66,20 @@ const toast = useToast()
 const dialog = useConfirm()
 const notifications = useNotifications()
 const unreadCount = notifications.unreadCount
-let notificationTimer = null
 
 const isAdminRoute = computed(() => route.path.startsWith('/backend'))
 
-function refreshUnreadCount() {
+function startNotifications() {
   if (!auth.token.value) {
     notifications.reset()
     return
   }
-  notifications.fetchUnreadCount().catch(() => {})
+  notifications.connect()
 }
 
-function stopNotificationPolling() {
-  if (notificationTimer) clearInterval(notificationTimer)
-  notificationTimer = null
-}
-
-function startNotificationPolling() {
-  stopNotificationPolling()
-  refreshUnreadCount()
-  if (auth.token.value) notificationTimer = setInterval(refreshUnreadCount, 30000)
-}
-
-onMounted(startNotificationPolling)
-watch(auth.token, startNotificationPolling)
-onBeforeUnmount(stopNotificationPolling)
+onMounted(startNotifications)
+watch(auth.token, startNotifications)
+onBeforeUnmount(notifications.disconnect)
 
 function handleLogout() {
   auth.logout()

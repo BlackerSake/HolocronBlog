@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # CORS 允许的来源，逗号分隔；默认本地开发地址
-    CORS_ORIGINS: str = "http://localhost:8848,https://localhost:8848,http://127.0.0.1:8848,https://127.0.0.1:8848"
+    CORS_ORIGINS: str = "http://localhost:8848,https://localhost:8848,http://127.0.0.1:8848,https://127.0.0.1:8848,http://localhost:5173,http://127.0.0.1:5173"
 
     # 时区
     TIMEZONE: str = "Asia/Shanghai"
@@ -73,4 +73,3 @@ class Settings(BaseSettings):
 
 # 实例化配置对象
 settings = Settings()
-

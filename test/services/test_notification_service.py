@@ -1,3 +1,7 @@
+import json
+from unittest.mock import AsyncMock
+
+from app.core.websocket import wbmanager
 from app.models.notification import Notification
 from app.services.notification_service import (
     create_notification,
@@ -9,6 +13,27 @@ from app.services.notification_service import (
 
 
 class TestCreateNotification:
+
+    async def test_pushes_created_notification_in_real_time(
+        self, db_session, test_user, other_user, monkeypatch
+    ):
+        send = AsyncMock()
+        monkeypatch.setattr(wbmanager, "send_personal_message", send)
+
+        notification = await create_notification(
+            db_session,
+            initiator_id=other_user.id,
+            recipient_id=test_user.id,
+            type="like_article",
+            content="有人赞了你的文章",
+        )
+
+        recipient_id, message = send.await_args.args
+        assert recipient_id == test_user.id
+        assert json.loads(message) == {
+            "type": "notification_created",
+            "notification_id": notification.id,
+        }
 
     async def test_someone_reply_to_me(
         self, db_session, test_user, other_user, existing_comment

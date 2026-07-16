@@ -1,6 +1,6 @@
 from datetime import datetime
 import json
-from typing import Dict
+from urllib.parse import urlparse
 
 from fastapi import WebSocket
 from jose import JWTError, jwt
@@ -16,7 +16,7 @@ _ALLOWED_ORIGINS = set(settings.cors_origin_list)
 class ConnectionManager:
     def __init__(self):
         """初始化连接管理器，维护 user_id 到 WebSocket 的映射。"""
-        self.active_connections: Dict[int, WebSocket] = {}
+        self.active_connections: dict[int, set[WebSocket]] = {}
 
     async def connect(self, websocket: WebSocket, db: AsyncSession) -> int | None:
         """
@@ -34,7 +34,8 @@ class ConnectionManager:
         """
         # Origin 检查，防止 CSWSH
         origin = websocket.headers.get("origin", "")
-        if origin not in _ALLOWED_ORIGINS:
+        same_origin = urlparse(origin).netloc == websocket.headers.get("host")
+        if origin not in _ALLOWED_ORIGINS and not same_origin:
             await websocket.close(code=4003)
             return None
 
@@ -62,19 +63,17 @@ class ConnectionManager:
 
         await websocket.accept()
 
-        # 同一用户保持最新连接
-        old = self.active_connections.get(user.id)
-        if old:
-            try:
-                await old.close(code=1000)
-            except Exception:
-                pass
-        self.active_connections[user.id] = websocket
+        self.active_connections.setdefault(user.id, set()).add(websocket)
         return user.id
 
-    def disconnect(self, user_id: int):
+    def disconnect(self, user_id: int, websocket: WebSocket):
         """断开并移除指定用户的 WebSocket 连接。"""
-        self.active_connections.pop(user_id, None)
+        connections = self.active_connections.get(user_id)
+        if not connections:
+            return
+        connections.discard(websocket)
+        if not connections:
+            self.active_connections.pop(user_id, None)
 
     async def send_personal_message(self, user_id: int, message: str):
         """
@@ -84,12 +83,11 @@ class ConnectionManager:
             user_id: 目标用户 ID。
             message: 要发送的文本消息。
         """
-        ws = self.active_connections.get(user_id)
-        if ws:
+        for websocket in list(self.active_connections.get(user_id, ())):
             try:
-                await ws.send_text(message)
+                await websocket.send_text(message)
             except Exception:
-                self.disconnect(user_id)
+                self.disconnect(user_id, websocket)
 
     async def broadcast_system(self, content: str):
         """向所有已连接用户广播系统消息。"""
@@ -103,7 +101,7 @@ class ConnectionManager:
 
     async def is_online(self, user_id: int) -> bool:
         """检查指定用户当前是否在线。"""
-        return user_id in self.active_connections
+        return bool(self.active_connections.get(user_id))
 
 
 wbmanager = ConnectionManager()

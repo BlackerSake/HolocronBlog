@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
+from app.core.websocket import wbmanager
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.core.log import log_call
@@ -14,6 +15,21 @@ from app.services.notification_service import (
 )
 
 router = APIRouter(prefix="/notifications")
+
+
+@router.websocket("/ws")
+async def notifications_websocket(
+    websocket: WebSocket,
+    db: AsyncSession = Depends(get_db),
+):
+    user_id = await wbmanager.connect(websocket, db)
+    if user_id is None:
+        return
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        wbmanager.disconnect(user_id, websocket)
 
 
 @log_call

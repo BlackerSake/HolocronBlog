@@ -40,7 +40,7 @@ async def lifespan(app: FastAPI):
     await start_sync_task()
     await start_like_warm_listener()
     await start_cache_rebuild_task()
-    await stop_cache_consistency_task()
+    await start_cache_consistency_task()
     if settings.LIKE_STREAM_IN_PROCESS:
         await start_like_stream_task()
 
