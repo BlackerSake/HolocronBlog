@@ -26,32 +26,35 @@ log_dir = os.path.join(os.path.dirname(__file__), "..", "logs")
 os.makedirs(log_dir, exist_ok=True)
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=settings.LOG_LEVEL,
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
         logging.FileHandler(os.path.join(log_dir, "app.log")),
         logging.StreamHandler()
     ]
 )
+logging.getLogger().setLevel(settings.LOG_LEVEL)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI 生命周期, 由 Alembic 管理建表"""
     await seed_default_roles()
-    await start_sync_task()
-    await start_like_warm_listener()
-    await start_cache_rebuild_task()
-    await start_cache_consistency_task()
-    if settings.LIKE_STREAM_IN_PROCESS:
-        await start_like_stream_task()
+    if settings.BACKGROUND_TASKS_ENABLED:
+        await start_sync_task()
+        await start_like_warm_listener()
+        await start_cache_rebuild_task()
+        await start_cache_consistency_task()
+        if settings.LIKE_STREAM_IN_PROCESS:
+            await start_like_stream_task()
 
     yield # 应用运行期间
-    
-    if settings.LIKE_STREAM_IN_PROCESS:
-        await stop_like_stream_task()
-    await stop_sync_task()
-    await stop_like_warm_listener()
-    await stop_cache_rebuild_task()
-    await stop_cache_consistency_task()
+
+    if settings.BACKGROUND_TASKS_ENABLED:
+        if settings.LIKE_STREAM_IN_PROCESS:
+            await stop_like_stream_task()
+        await stop_sync_task()
+        await stop_like_warm_listener()
+        await stop_cache_rebuild_task()
+        await stop_cache_consistency_task()
     await engine.dispose() # 关闭数据库连接, 相当于@app.on_event("shutdown")
 
 app = FastAPI(
@@ -85,7 +88,8 @@ app.add_middleware(
     allow_headers=["*"], # 允许的请求头, * 表示所有
     max_age=300, # 浏览器缓存CORS响应的最长时间, s
 )
-app.add_middleware(BaseHTTPMiddleware, dispatch=rate_limit_middleware)
+if settings.RATE_LIMIT_ENABLED:
+    app.add_middleware(BaseHTTPMiddleware, dispatch=rate_limit_middleware)
 
 @app.get("/")
 async def root():

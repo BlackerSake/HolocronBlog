@@ -22,6 +22,7 @@ from app.services.ranking_service import (
 )
 from app.core.log import log_call
 from app.core.redis import redis_client
+import asyncio
 import json
 
 router = APIRouter(prefix="/articles", tags=["Articles"])
@@ -168,16 +169,14 @@ async def get_article(slug: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail="文章不存在")
 
-    views_key = f"article:views:{slug}"
     try:
-        await redis_client.incr(views_key)
-        views = await redis_client.get(views_key)
-        article.views = int(views or 0)
+        views, _ = await asyncio.gather(
+            redis_client.incr(f"article:views:{slug}"),
+            bump_article_hot_score(article.id, view_delta=1),
+        )
+        article.views = int(views)
     except Exception:
         pass
-
-    # 浏览行为进入 zset 热榜;函数内部fail-open,不影响文章详情返回
-    await bump_article_hot_score(article.id, view_delta=1)
     return Response(data=article)
 
 

@@ -13,6 +13,17 @@ const state = reactive({
 let socket = null
 let reconnectTimer = null
 
+function isTokenExpired(token) {
+  try {
+    const payload = token.split('.')[1]
+    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/')
+    const data = JSON.parse(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, '=')))
+    return !data.exp || data.exp * 1000 <= Date.now()
+  } catch {
+    return true
+  }
+}
+
 export function useNotifications() {
   async function fetchUnreadCount() {
     if (!localStorage.getItem('token')) {
@@ -69,6 +80,12 @@ export function useNotifications() {
     disconnect()
     const token = localStorage.getItem('token')
     if (!token) return
+    if (isTokenExpired(token)) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      window.location.href = '/login'
+      return
+    }
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const connection = new WebSocket(`${protocol}//${window.location.host}/notifications/ws?token=${encodeURIComponent(token)}`)
     socket = connection

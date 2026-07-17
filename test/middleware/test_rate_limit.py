@@ -71,6 +71,16 @@ class TestMiddlewarePassthrough:
         assert resp.status_code == 200
         assert resp.json() == {"ok": True}
 
+    async def test_disabled_skips_redis(self, client: AsyncClient):
+        """关闭限流时不访问 Redis。"""
+        with (
+            patch("app.middleware.rate_limit.settings.RATE_LIMIT_ENABLED", False),
+            patch("app.middleware.rate_limit.redis_client") as redis,
+        ):
+            resp = await client.get("/ping")
+        assert resp.status_code == 200
+        redis.eval.assert_not_called()
+
     async def test_multiple_requests_pass(self, client: AsyncClient):
         """低于限额的多次请求正常通过"""
         with patch("app.middleware.rate_limit.redis_client") as m:

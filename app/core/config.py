@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     REDIS_PORT: int = 6379
     REDIS_SYNC_INTERVAL: int = 60 * 5
     LIKE_STREAM_IN_PROCESS: bool = True
+    RATE_LIMIT_ENABLED: bool = True
+    BACKGROUND_TASKS_ENABLED: bool = True
+    LOG_LEVEL: str = "INFO"
 
     # Railway 注入 postgresql:// → 自动转异步驱动
     def __init__(self, **kwargs):

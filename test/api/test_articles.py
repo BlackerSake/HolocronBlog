@@ -259,7 +259,6 @@ class TestArticleViews:
         """访问文章触发 redis incr，并返回 views 值"""
         with patch("app.routers.articles.redis_client") as mock_r:
             mock_r.incr = AsyncMock(return_value=5)
-            mock_r.get = AsyncMock(return_value="5")
             with patch("app.services.article_cache_service.redis_client") as cache_r:
                 cache_r.get = AsyncMock(return_value=None)
                 cache_r.set = AsyncMock(retirn_value=True)

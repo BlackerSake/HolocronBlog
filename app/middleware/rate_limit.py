@@ -2,6 +2,7 @@ import time
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
+from app.core.config import settings
 from app.core.redis import redis_client
 import logging
 logger = logging.getLogger(__name__)
@@ -150,6 +151,9 @@ async def rate_limit_middleware(request: Request, call_next):
     Returns:
         请求的响应对象
     """
+    if not settings.RATE_LIMIT_ENABLED:
+        return await call_next(request)
+
     client_ip = _get_client_ip(request)
     limit = _get_path_limit(request.url.path)
     capacity, refill_rate = _get_token_bucket(request.url.path)
