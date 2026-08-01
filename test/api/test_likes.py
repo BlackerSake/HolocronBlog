@@ -155,10 +155,11 @@ class TestMeLikeHistory:
         assert resp.json() == []
 
     async def test_returns_history(self, client: AsyncClient, auth_headers, published_article, mock_redis, db_session):
-        """点赞后无需等待异步消费 -> 历史记录立即存在"""
+        """点赞事件消费后历史记录可见"""
         await client.post(
             f"/articles/{published_article.slug}/like", headers=auth_headers,
         )
+        await flush_like_stream(mock_redis, db_session)
         resp = await client.get(
             "/me/like-history", params={"target_type": "article"}, headers=auth_headers,
         )

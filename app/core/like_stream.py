@@ -15,7 +15,7 @@ from app.models.like import Likes
 LIKE_STREAM = "like:events"
 LIKE_DEADLETTER_STREAM = "like:events:deadletter"
 LIKE_GROUP = "like-db-writers"
-LIKE_GROUP_START_ID = "$"
+LIKE_GROUP_START_ID = "0"
 LIKE_BATCH_SIZE = 100
 LIKE_BLOCK_MS = 5000
 LIKE_PENDING_IDLE_MS = 60_000

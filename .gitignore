@@ -30,7 +30,7 @@ ENV/
 # Logs
 *.log
 logs/
-
+resume/
 # OS metadata
 .DS_Store
 Thumbs.db

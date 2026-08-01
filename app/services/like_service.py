@@ -443,7 +443,6 @@ async def change_like_status_cached(db: AsyncSession,
             "is_liked": is_liked,
         }
     _record_redis_success()
-    await _set_like_status_in_db(db, user_id, target_id, target_type, is_liked)
     if target_type == "article":
         await bump_article_hot_score(target_id, like_delta=1 if is_liked else -1)
     return {

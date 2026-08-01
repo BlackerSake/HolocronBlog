@@ -153,6 +153,13 @@ class TestCachedLikeStatus:
         assert event["target_id"] == str(published_article.id)
         assert event["target_type"] == "article"
         assert event["is_liked"] == "1"
+        assert await db_session.scalar(
+            select(Likes.id).where(
+                Likes.user_id == test_user.id,
+                Likes.target_id == published_article.id,
+                Likes.target_type == "article",
+            )
+        ) is None
 
     async def test_status_reads_redis_first(self, mock_redis, db_session, published_article, test_user):
         base = f"like:article:{published_article.id}"
