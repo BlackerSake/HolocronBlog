@@ -63,36 +63,42 @@ class FakeLikeRedis:
     async def sismember(self, key, value):
         return str(value) in self.sets.get(key, set())
 
+    async def srem(self, key, *values):
+        bucket = self.sets.get(key, set())
+        removed = 0
+        for value in values:
+            if str(value) in bucket:
+                bucket.remove(str(value))
+                removed += 1
+        return removed
+
+    async def scard(self, key):
+        return len(self.sets.get(key, set()))
+
     async def get(self, key):
         return self.strings.get(key)
 
     async def eval(self, script, numkeys, *values):
-        users_key, count_key = values[:2]
-        stream_key = values[2] if numkeys >= 3 else None
+        users_key, stream_key = values[:2]
         user_id = str(values[numkeys])
-        target_id = str(values[numkeys + 1]) if len(values) > numkeys + 1 else ""
-        target_type = str(values[numkeys + 2]) if len(values) > numkeys + 2 else ""
+        target_id = str(values[numkeys + 1])
+        target_type = str(values[numkeys + 2])
+        desired = bool(int(values[numkeys + 4]))
         users = self.sets.setdefault(users_key, set())
-        count = int(self.strings.get(count_key, "0"))
-        if user_id in users:
-            users.remove(user_id)
-            count = max(count - 1, 0)
-            self.strings[count_key] = str(count)
-            is_liked = 0
-        else:
+        if desired:
+            changed = int(user_id not in users)
             users.add(user_id)
-            count += 1
-            self.strings[count_key] = str(count)
-            is_liked = 1
-        event_id = None
-        if stream_key:
-            event_id = await self.xadd(stream_key, {
+        else:
+            changed = int(user_id in users)
+            users.discard(user_id)
+        if changed:
+            await self.xadd(stream_key, {
                 "user_id": user_id,
                 "target_id": target_id,
                 "target_type": target_type,
-                "is_liked": is_liked,
+                "is_liked": int(desired),
             })
-        return [is_liked, count, event_id]
+        return [int(desired), len(users), changed]
 
     async def xadd(self, key, fields, maxlen=None, approximate=True):
         stream = self.streams.setdefault(key, [])
@@ -152,7 +158,8 @@ class FakeLikeRedis:
 
     async def scan(self, cursor=0, match=None, count=100):
         import fnmatch
-        keys = [k for k in self.strings if match is None or fnmatch.fnmatch(k, match)]
+        keys = set(self.strings) | set(self.sets)
+        keys = [k for k in keys if match is None or fnmatch.fnmatch(k, match)]
         return (0, keys)
 
 @pytest.fixture(scope="session")

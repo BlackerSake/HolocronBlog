@@ -13,38 +13,33 @@ from app.models.user import User
 from app.services.ranking_service import bump_article_hot_score
 logger = logging.getLogger(__name__)
 
-#  Lua 脚本原子完成: Set 切换 + Count 更新 + XADD 写入 Stream
-# 三次 Redis 操作在同一 EVAL 内完成,消除 dual-write 不一致窗口
-_TOGGLE_LIKE_LUA = """
-local liked = redis.call("SISMEMBER", KEYS[1], ARGV[1])
-local is_liked
-local count
-if liked == 1 then
-    redis.call("SREM", KEYS[1], ARGV[1])
-    count = tonumber(redis.call("GET", KEYS[2]) or "0") - 1
-    if count < 0 then count = 0 end
-    is_liked = 0
+# Lua 原子设置目标状态，并在状态实际变化时写入 Stream。
+_SET_LIKE_STATE_LUA = """
+local desired = tonumber(ARGV[5])
+local changed
+
+if desired == 1 then
+    changed = redis.call("SADD", KEYS[1], ARGV[1])
 else
-    redis.call("SADD", KEYS[1], ARGV[1])
-    count = tonumber(redis.call("GET", KEYS[2]) or "0") + 1
-    is_liked = 1
+    changed = redis.call("SREM", KEYS[1], ARGV[1])
 end
 
-redis.call("SET", KEYS[2], count)
-local event_id = redis.call(
-    "XADD", KEYS[3], "MAXLEN", "~", ARGV[4], "*",
-    "user_id", ARGV[1],
-    "target_id", ARGV[2],
-    "target_type", ARGV[3],
-    "is_liked", is_liked
-)
-return {is_liked, count, event_id}
+local count = redis.call("SCARD", KEYS[1])
+if changed == 1 then
+    redis.call(
+        "XADD", KEYS[2], "MAXLEN", "~", ARGV[4], "*",
+        "user_id", ARGV[1],
+        "target_id", ARGV[2],
+        "target_type", ARGV[3],
+        "is_liked", desired
+    )
+end
+
+return {desired, count, changed}
 """
 
-LIKE_CACHE_TTL = 60 * 30              # 缓存 TTL: 30 分钟,统一过期防止幽灵状态
-LIKE_INIT_LOCK_TTL = 5               # 预热分布式锁超时: 5 秒,防止死锁
-LIKE_INIT_WAIT_TIMES = 5             # 自旋等待次数
-LIKE_INIT_WAIT_SECONDS = 0.02        # 单次自旋间隔 (20ms)
+LIKE_CACHE_TTL = 60 * 30             # 缓存 TTL: 30 分钟，统一过期防止幽灵状态
+LIKE_INIT_LOCK_TTL = 5               # 预热分布式锁超时: 5 秒，防止死锁
 LIKE_REDIS_BREAKER_THRESHOLD = 5     # 连续 5 次 Redis 失败 → 熔断打开
 LIKE_REDIS_BREAKER_RESET_SECONDS = 30  # 熔断后 30 秒进入半开状态,放行探测请求
 LIKE_WARM_CHANNEL_PREFIX = "like:warmed"
@@ -90,7 +85,7 @@ def _record_redis_failure() -> None:
         _redis_breaker_opened_at = time.monotonic()
 
 
-def _like_keys(target_id: int, target_type: str) -> tuple[str, str, str, str]:
+def _like_keys(target_id: int, target_type: str) -> tuple[str, str, str]:
     """生成点赞功能使用的 Redis 键名元组
 
     Args:
@@ -98,12 +93,11 @@ def _like_keys(target_id: int, target_type: str) -> tuple[str, str, str, str]:
         target_type: 目标类型（"article" 或 "comment"）
 
     Returns:
-        (用户集合键, 计数字键, 已加载标记键, 初始化锁键) 四元组
+        (用户集合键, 已加载标记键, 初始化锁键) 三元组
     """
     base = f"like:{target_type}:{target_id}"
     return (
         f"{base}:users",
-        f"{base}:count",
         f"{base}:loaded",
         f"{base}:init_lock",
     )
@@ -192,13 +186,13 @@ async def _warm_like_cache(db: AsyncSession, target_id: int, target_type: str) -
     - 第一个拿到锁的请求去 查db 并写入缓存
     - 其他请求等待redis Pub/Sub广播,等锁释放后直接读取缓存
     - 自旋超时未就绪则抛出 LikeCacheWarmupError,调用方降级到 DB 路径
-    - 缓存 TTL: LIKE_CACHE_TTL (30 分钟),loaded / count / users 统一过期
+    - 缓存 TTL: LIKE_CACHE_TTL（30 分钟），loaded / users 统一过期
     Args:
         db: 数据库会话
         target_id: 目标对象 ID
         target_type: 目标类型（"article" 或 "comment"）
     """
-    users_key, count_key, loaded_key, lock_key = _like_keys(target_id, target_type)
+    users_key, loaded_key, lock_key = _like_keys(target_id, target_type)
     if await redis_client.exists(loaded_key):
         return
 
@@ -243,8 +237,7 @@ async def _warm_like_cache(db: AsyncSession, target_id: int, target_type: str) -
         
         # 统一 30 分钟 TTL,与 loaded/count 一起过期,防止幽灵状态
         await redis_client.expire(users_key, LIKE_CACHE_TTL)
-        await redis_client.set(count_key, len(user_ids), ex=LIKE_CACHE_TTL)    # 计数
-        await redis_client.set(loaded_key, "1", ex=LIKE_CACHE_TTL)     # 标记已加载
+        await redis_client.set(loaded_key, "1", ex=LIKE_CACHE_TTL)
         await _publish_like_warmed(target_id, target_type)
     finally:
         await redis_client.delete(lock_key)
@@ -256,7 +249,7 @@ async def _set_like_status_in_db(db: AsyncSession,
                                  target_type: str,
                                  is_liked: bool,
                                  *,
-                                 commit: bool = True) -> None:
+                                 commit: bool = True) -> bool:
     """
     ## 将点赞状态持久化写入db(幂等db写入)
     所谓幂等性:对同一个请求,重复执行多次操作,产生同样的结果
@@ -291,16 +284,32 @@ async def _set_like_status_in_db(db: AsyncSession,
             changed = True
     if commit and changed:
         await db.commit()
+    return changed
 
 
-async def _change_like_status_in_db_with_count(db: AsyncSession,
-                                               user_id: int,
-                                               target_id: int,
-                                               target_type: str) -> tuple[bool, int]:
-    """DB fallback 路径：切换点赞状态并返回 DB 中的当前计数"""
-    is_liked = await change_like_status(db, user_id, target_id, target_type)
+async def _set_like_status_in_db_with_count(db: AsyncSession,
+                                            user_id: int,
+                                            target_id: int,
+                                            target_type: str,
+                                            is_liked: bool) -> tuple[int, bool]:
+    """
+    设置数据库中的点赞目标状态并返回当前计数。
+
+    Args:
+        db: 数据库会话。
+        user_id: 当前用户 ID。
+        target_id: 点赞目标 ID。
+        target_type: 点赞目标类型。
+        is_liked: 期望的最终点赞状态。
+
+    Returns:
+        当前点赞总数和本次操作是否改变状态。
+    """
+    changed = await _set_like_status_in_db(
+        db, user_id, target_id, target_type, is_liked
+    )
     like_count = await _get_target_like_count(db, target_id, target_type)
-    return is_liked, like_count
+    return like_count, changed
 
 
 async def _update_target_count(db: AsyncSession,
@@ -332,17 +341,58 @@ async def update_like_count(db: AsyncSession,
     """
     await _update_target_count(db, target_id, target_type, delta)
 
-async def get_comment_by_id(db: AsyncSession, comment_id: int) -> Comment:
+async def get_article_like_target(
+    db: AsyncSession,
+    slug: str,
+) -> tuple[int, int, int] | None:
     """
-    ## 根据 ID 查询评论
+    查询文章点赞链路所需的最小字段。
+
+    Args:
+        db: 数据库会话。
+        slug: 已发布文章的 URL 标识。
+
+    Returns:
+        文章 ID、作者 ID、数据库点赞数；文章不存在时返回 None。
     """
-    result = await db.execute(
-        select(Comment).where(Comment.id == comment_id)
-    )
-    comment = result.scalar_one_or_none()
-    if not comment:
-        raise ValueError(f"Comment with id {comment_id} not found")
-    return comment
+    row = (
+        await db.execute(
+            select(Article.id, Article.author_id, Article.like_count).where(
+                Article.slug == slug,
+                Article.is_deleted == False,
+                Article.is_published == True,
+            )
+        )
+    ).one_or_none()
+    return tuple(row) if row else None
+
+
+async def get_comment_like_target(
+    db: AsyncSession,
+    comment_id: int,
+) -> tuple[int, int, int, int] | None:
+    """
+    查询评论点赞链路所需的最小字段。
+
+    Args:
+        db: 数据库会话。
+        comment_id: 评论 ID。
+
+    Returns:
+        评论 ID、作者 ID、所属文章 ID、数据库点赞数；评论不存在时返回 None。
+    """
+    row = (
+        await db.execute(
+            select(
+                Comment.id,
+                Comment.author_id,
+                Comment.article_id,
+                Comment.like_count,
+            ).where(Comment.id == comment_id)
+        )
+    ).one_or_none()
+    return tuple(row) if row else None
+
 
 async def change_like_status(db: AsyncSession,
                              user_id: int,
@@ -369,87 +419,77 @@ async def change_like_status(db: AsyncSession,
 async def change_like_status_cached(db: AsyncSession,
                                     user_id: int,
                                     target_id: int,
-                                    target_type: str) -> dict:
+                                    target_type: str,
+                                    is_liked: bool) -> dict:
     """
-    ## Redis 原子切换点赞状态,接口实时返回 Redis 计数
+    设置 Redis 中的点赞目标状态并返回权威计数。
 
-    ### 流程说明:
-    1. 熔断器检查: OPEN 态直接走 DB fallback,不碰 Redis
-    2. 缓存预热: `_warm_like_cache` 确保 like set + count 已就绪 (懒加载)
-    3. Lua 脚本原子执行:
-       - `SISMEMBER` 判断当前状态
-       - `SADD`/`SREM` 切换用户集合
-       - `SET` 更新计数
-       - `XADD` 追加事件到 Redis Stream
-       — 以上四次操作在同一次 EVAL 内完成,消除 dual-write 不一致窗口
-    4. DB 持久化由 Stream consumer 异步批量落库,不阻塞当前请求
+    Lua 使用 SADD/SREM 设置期望状态，通过 SCARD 获取计数，仅在状态实际
+    变化时写入 Redis Stream。Redis 不可用时回退数据库幂等写入。
 
-    ### 异常路径:
-    - Lua/Redis 异常 → `_record_redis_failure()` 累计熔断计数 → DB fallback
-    - 连续 LIKE_REDIS_BREAKER_THRESHOLD 次失败 → 熔断打开
-    - LIKE_REDIS_BREAKER_RESET_SECONDS 后放行探测请求,成功则关闭熔断
-
-    ### Args:
+    Args:
         db: 数据库会话
         user_id: 当前用户 ID
         target_id: 目标对象 ID (文章或评论)
         target_type: 目标类型 ("article" / "comment")
+        is_liked: 期望的最终点赞状态
 
-    ### Returns:
-        dict: {target_id, target_type, like_count, is_liked}
+    Returns:
+        包含目标信息、最终点赞状态、点赞数和是否实际变更的字典。
     """
-    users_key, count_key, _, _ = _like_keys(target_id, target_type)
+    users_key, _, _ = _like_keys(target_id, target_type)
     if not _redis_breaker_allows_request():
-        is_liked, like_count = await _change_like_status_in_db_with_count(
-            db, user_id, target_id, target_type
+        like_count, changed = await _set_like_status_in_db_with_count(
+            db, user_id, target_id, target_type, is_liked
         )
-        if target_type == "article":
+        if target_type == "article" and changed:
             await bump_article_hot_score(target_id, like_delta=1 if is_liked else -1)
         return {
             "target_id": target_id,
             "target_type": target_type,
             "like_count": like_count,
             "is_liked": is_liked,
+            "changed": changed,
         }
 
     try:
-        # 确保 缓存已经预热加载
         await _warm_like_cache(db, target_id, target_type)
-        # 使用Lua脚本 原子切换点赞状态并返回最新计数
         result = await redis_client.eval(
-            _TOGGLE_LIKE_LUA,
-            3,
+            _SET_LIKE_STATE_LUA,
+            2,
             users_key,
-            count_key,
             LIKE_STREAM,
             str(user_id),
             str(target_id),
             target_type,
             str(LIKE_STREAM_MAXLEN),
+            int(is_liked),
         )
-        is_liked = bool(int(result[0]))
         like_count = int(result[1])
+        changed = bool(int(result[2]))
     except Exception:
         _record_redis_failure()
-        is_liked, like_count = await _change_like_status_in_db_with_count(
-            db, user_id, target_id, target_type
+        like_count, changed = await _set_like_status_in_db_with_count(
+            db, user_id, target_id, target_type, is_liked
         )
-        if target_type == "article":
+        if target_type == "article" and changed:
             await bump_article_hot_score(target_id, like_delta=1 if is_liked else -1)
         return {
             "target_id": target_id,
             "target_type": target_type,
             "like_count": like_count,
             "is_liked": is_liked,
+            "changed": changed,
         }
     _record_redis_success()
-    if target_type == "article":
+    if target_type == "article" and changed:
         await bump_article_hot_score(target_id, like_delta=1 if is_liked else -1)
     return {
         "target_id": target_id,
         "target_type": target_type,
         "like_count": like_count,
         "is_liked": is_liked,
+        "changed": changed,
     }
     
 
@@ -483,16 +523,15 @@ async def get_like_status_cached(db: AsyncSession,
                                  target_type: str,
                                  like_count: int) -> dict:
     """
-    优先从 Redis Set/String 读取点赞状态,Redis 不可用时回退 DB
+    优先从 Redis Set 读取点赞状态和计数，Redis 不可用时回退数据库。
     """
-    users_key, count_key, _, _ = _like_keys(target_id, target_type)
+    users_key, _, _ = _like_keys(target_id, target_type)
     try:
         await _warm_like_cache(db, target_id, target_type)
-        cached_count = await redis_client.get(count_key)
         return {
             "target_id": target_id,
             "target_type": target_type,
-            "like_count": int(cached_count if cached_count is not None else like_count),
+            "like_count": int(await redis_client.scard(users_key)),
             "is_liked": bool(await redis_client.sismember(users_key, str(user_id))),
         }
     except Exception:

@@ -91,14 +91,14 @@ export const commentsAPI = {
 
 /* ── Likes ── */
 export const likesAPI = {
-  toggleArticle: slug =>
-    api.post(`/articles/${slug}/like`).then(res => res.data),
+  setArticle: (slug, isLiked) =>
+    api.put(`/articles/${slug}/like`, { is_liked: isLiked }).then(res => res.data),
 
   articleStatus: slug =>
     api.get(`/articles/${slug}/like-status`).then(res => res.data),
 
-  toggleComment: id =>
-    api.post(`/comments/${id}/like`).then(res => res.data),
+  setComment: (id, isLiked) =>
+    api.put(`/comments/${id}/like`, { is_liked: isLiked }).then(res => res.data),
 
   commentStatus: id =>
     api.get(`/comments/${id}/like-status`).then(res => res.data),

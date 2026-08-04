@@ -87,12 +87,13 @@ async def reconcile_like_counts(db: AsyncSession) -> int:
     ## 对账点赞计数
 
     设计策略:  
-    - 冗余字段不一致时,以redis count 修复冗余字段
-    - 如果 db 与 redis count 不一致, 只记录warning;明细有stream pending retry/dlq 机制追平
+    - 冗余字段不一致时，以 Redis Set 的成员数量修复冗余字段
+    - 如果数据库明细与 Redis Set 不一致，只记录 warning；明细由 Stream
+      pending 重试和死信机制追平
     """
     fixed = 0
     for target_type, model in (("article", Article), ("comment", Comment)):
-        keys = await _scan_keys(f"like:{target_type}:*:count")
+        keys = await _scan_keys(f"like:{target_type}:*:loaded")
 
         for key in keys:
             parts = key.split(":")
@@ -100,11 +101,8 @@ async def reconcile_like_counts(db: AsyncSession) -> int:
                 continue
 
             target_id = int(parts[2])
-            cached = await redis_client.get(key)
-            if cached is None:
-                continue
-
-            redis_count = int(cached)
+            users_key = f"like:{target_type}:{target_id}:users"
+            redis_count = int(await redis_client.scard(users_key))
             db_counter = await db.scalar(
                 select(model.like_count)
                 .where(model.id == target_id)

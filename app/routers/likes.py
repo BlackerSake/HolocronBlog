@@ -6,12 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.user import User
-from app.schemas.like import LikeHistoryOut, LikeStatusOut
-from app.services.article_service import get_published_article_by_slug
+from app.schemas.like import LikeHistoryOut, LikeMutationOut, LikeStateIn, LikeStatusOut
 from app.services.like_service import (
     change_like_status_cached,
     enrich_like_history_items,
-    get_comment_by_id,
+    get_article_like_target,
+    get_comment_like_target,
     get_like_status_cached,
     get_user_history_likes,
 )
@@ -21,89 +21,116 @@ from app.services.notification_service import create_notification
 router = APIRouter()
 
 
-@router.post("/articles/{slug}/like", response_model=LikeStatusOut)
-async def click_like_or_unlike_article(slug: str,
-                                       current_user: User = Depends(get_current_user),
-                                       db: AsyncSession = Depends(get_db)):
+@router.put("/articles/{slug}/like", response_model=LikeMutationOut)
+async def set_article_like_state(
+    slug: str,
+    payload: LikeStateIn,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """
-    点赞或取消点赞文章
+    设置当前用户对文章的点赞状态。
 
-    切换当前用户对指定文章的点赞状态（已赞→取消，未赞→点赞）。
+    接口接收期望的最终状态，重复提交相同状态不会产生重复点赞记录或
+    Redis Stream 事件。
 
     Args:
         slug: 文章 URL 标识
+        payload: 期望的最终点赞状态
         current_user: 当前登录用户
         db: 数据库会话
 
     Returns:
-        LikeStatusOut — 包含目标类型、ID、点赞状态及点赞总数
+        LikeMutationOut: 最终点赞状态、点赞总数和本次是否实际变更
+
+    Raises:
+        HTTPException 404: 文章不存在、未发布或已删除
     """
-    article = await get_published_article_by_slug(db, slug)
+    target = await get_article_like_target(db, slug)
+    if target is None:
+        raise HTTPException(status_code=404, detail="文章不存在")
+    article_id, author_id, _ = target
 
-    status = await change_like_status_cached(db, current_user.id, article.id, "article")
+    status = await change_like_status_cached(
+        db,
+        current_user.id,
+        article_id,
+        "article",
+        payload.is_liked,
+    )
 
-    if status["is_liked"]:
+    if status["is_liked"] and status["changed"]:
         await create_notification(
             db,
             initiator_id=current_user.id,
-            recipient_id=article.author_id,
+            recipient_id=author_id,
             type="like_article",
             content="有人赞了你的文章",
-            article_id=article.id,
+            article_id=article_id,
         )
-    await wbmanager.send_personal_message(current_user.id, json.dumps({
-        "type": "like_changed",
-        "user_id": current_user.id,
-        **status,
-    }))
+    if status["changed"]:
+        # 发送 WebSocket 消息通知前端点赞状态变更
+        await wbmanager.send_personal_message(current_user.id, json.dumps({
+            "type": "like_changed",
+            "user_id": current_user.id,
+            **status,
+        }))
+    return LikeMutationOut(**status)
 
-    return LikeStatusOut(
-        target_type="article",
-        target_id=article.id,
-        is_liked=status["is_liked"],
-        like_count=status["like_count"]
-    )
 
-@router.post("/comments/{comment_id}/like", response_model=LikeStatusOut)
-async def click_like_or_unlike_comment(comment_id: int,
-                                       current_user: User = Depends(get_current_user),
-                                       db: AsyncSession = Depends(get_db)):
+@router.put("/comments/{comment_id}/like", response_model=LikeMutationOut)
+async def set_comment_like_state(
+    comment_id: int,
+    payload: LikeStateIn,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """
-    点赞或取消点赞评论
+    设置当前用户对评论的点赞状态。
 
-    切换当前用户对指定评论的点赞状态（已赞→取消，未赞→点赞）。
+    接口接收期望的最终状态，重复提交相同状态不会产生重复点赞记录或
+    Redis Stream 事件。
 
     Args:
         comment_id: 评论 ID
+        payload: 期望的最终点赞状态
         current_user: 当前登录用户
         db: 数据库会话
 
     Returns:
-        LikeStatusOut — 包含目标类型、ID、点赞状态及点赞总数
+        LikeMutationOut: 最终点赞状态、点赞总数和本次是否实际变更
+
+    Raises:
+        HTTPException 404: 评论不存在
     """
-    comment = await get_comment_by_id(db, comment_id)
-    status = await change_like_status_cached(db, current_user.id, comment_id, "comment")
-    if status["is_liked"]:
+    target = await get_comment_like_target(db, comment_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="评论不存在")
+    target_id, author_id, article_id, _ = target
+    status = await change_like_status_cached(
+        db,
+        current_user.id,
+        target_id,
+        "comment",
+        payload.is_liked,
+    )
+    if status["is_liked"] and status["changed"]:
         await create_notification(
             db,
             initiator_id=current_user.id,
-            recipient_id=comment.author_id,
+            recipient_id=author_id,
             type="like_comment",
             content="有人赞了你的评论",
-            article_id=comment.article_id,
-            comment_id=comment.id,
+            article_id=article_id,
+            comment_id=target_id,
         )
-    await wbmanager.send_personal_message(current_user.id, json.dumps({
-        "type": "like_changed",
-        "user_id": current_user.id,
-        **status,
-    }))
-    return LikeStatusOut(
-        target_type="comment",
-        target_id=comment.id,
-        is_liked=status["is_liked"],
-        like_count=status["like_count"]
-    )
+    if status["changed"]:
+        await wbmanager.send_personal_message(current_user.id, json.dumps({
+            "type": "like_changed",
+            "user_id": current_user.id,
+            **status,
+        }))
+    return LikeMutationOut(**status)
 
 @router.get("/articles/{slug}/like-status", response_model=LikeStatusOut)
 async def article_like_status(slug: str,
@@ -120,9 +147,14 @@ async def article_like_status(slug: str,
     Returns:
         LikeStatusOut — 包含点赞状态及点赞总数
     """
-    article = await get_published_article_by_slug(db, slug)
+    target = await get_article_like_target(db, slug)
+    if target is None:
+        raise HTTPException(status_code=404, detail="文章不存在")
+    article_id, _, like_count = target
 
-    status = await get_like_status_cached(db, current_user.id, article.id, "article", article.like_count)
+    status = await get_like_status_cached(
+        db, current_user.id, article_id, "article", like_count
+    )
     return LikeStatusOut(**status)
 
 @router.get("/comments/{comment_id}/like-status", response_model=LikeStatusOut)
@@ -140,8 +172,13 @@ async def comment_like_status(comment_id: int,
     Returns:
         LikeStatusOut — 包含点赞状态及点赞总数
     """
-    comment = await get_comment_by_id(db, comment_id)
-    status = await get_like_status_cached(db, current_user.id, comment_id, "comment", comment.like_count)
+    target = await get_comment_like_target(db, comment_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="评论不存在")
+    target_id, _, _, like_count = target
+    status = await get_like_status_cached(
+        db, current_user.id, target_id, "comment", like_count
+    )
     return LikeStatusOut(**status)
 @router.get("/me/like-history", response_model=list[LikeHistoryOut])
 async def get_liked_hisotry(target_type: str | None = None,

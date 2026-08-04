@@ -76,7 +76,7 @@ async function toggleLike() {
   if (liking.value) return
   liking.value = true
   try {
-    const status = await likesAPI.toggleArticle(route.params.slug)
+    const status = await likesAPI.setArticle(route.params.slug, !liked.value)
     liked.value = status.is_liked
     likeCount.value = status.like_count
     likeLoaded.value = true

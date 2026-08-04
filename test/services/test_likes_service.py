@@ -141,13 +141,13 @@ class TestCachedLikeStatus:
 
     async def test_toggle_updates_redis_and_stream(self, mock_redis, db_session, published_article, test_user):
         status = await change_like_status_cached(
-            db_session, test_user.id, published_article.id, "article"
+            db_session, test_user.id, published_article.id, "article", True
         )
 
         assert status["is_liked"] is True
         assert status["like_count"] == 1
+        assert status["changed"] is True
         assert str(test_user.id) in mock_redis.sets[f"like:article:{published_article.id}:users"]
-        assert mock_redis.strings[f"like:article:{published_article.id}:count"] == "1"
         _, event = mock_redis.streams["like:events"][0]
         assert event["user_id"] == str(test_user.id)
         assert event["target_id"] == str(published_article.id)
@@ -161,11 +161,26 @@ class TestCachedLikeStatus:
             )
         ) is None
 
+    async def test_repeated_state_does_not_append_stream(self, mock_redis, db_session, published_article, test_user):
+        """重复设置相同状态不会产生重复事件。"""
+        await change_like_status_cached(
+            db_session, test_user.id, published_article.id, "article", True
+        )
+        status = await change_like_status_cached(
+            db_session, test_user.id, published_article.id, "article", True
+        )
+
+        assert status["is_liked"] is True
+        assert status["like_count"] == 1
+        assert status["changed"] is False
+        assert len(mock_redis.streams["like:events"]) == 1
+
     async def test_status_reads_redis_first(self, mock_redis, db_session, published_article, test_user):
         base = f"like:article:{published_article.id}"
         mock_redis.strings[f"{base}:loaded"] = "1"
-        mock_redis.strings[f"{base}:count"] = "7"
-        mock_redis.sets[f"{base}:users"] = {str(test_user.id)}
+        mock_redis.sets[f"{base}:users"] = {
+            str(test_user.id), "2", "3", "4", "5", "6", "7"
+        }
 
         status = await get_like_status_cached(
             db_session, test_user.id, published_article.id, "article", 0

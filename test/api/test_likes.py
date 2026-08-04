@@ -14,18 +14,22 @@ async def flush_like_stream(mock_redis, db_session):
     mock_redis.streams[LIKE_STREAM] = []
 
 
-class TestToggleLike:
-    """POST /articles/{slug}/like"""
+class TestSetLikeState:
+    """PUT /articles/{slug}/like"""
 
     async def test_without_auth_returns_401(self, client: AsyncClient, published_article):
         """未认证 -> 401"""
-        resp = await client.post(f"/articles/{published_article.slug}/like")
+        resp = await client.put(
+            f"/articles/{published_article.slug}/like",
+            json={"is_liked": True},
+        )
         assert resp.status_code == 401
 
     async def test_like_article(self, client: AsyncClient, auth_headers, published_article):
         """点赞成功 -> 200, is_liked=True"""
-        resp = await client.post(
+        resp = await client.put(
             f"/articles/{published_article.slug}/like",
+            json={"is_liked": True},
             headers=auth_headers,
         )
         assert resp.status_code == 200
@@ -34,33 +38,41 @@ class TestToggleLike:
         assert data["target_id"] == published_article.id
         assert data["is_liked"] is True
         assert data["like_count"] == 1
+        assert data["changed"] is True
 
     async def test_unlike_article(self, client: AsyncClient, auth_headers, published_article):
         """取消点赞 -> is_liked=False"""
-        await client.post(
+        await client.put(
             f"/articles/{published_article.slug}/like",
+            json={"is_liked": True},
             headers=auth_headers,
         )
-        resp = await client.post(
+        resp = await client.put(
             f"/articles/{published_article.slug}/like",
+            json={"is_liked": False},
             headers=auth_headers,
         )
         assert resp.status_code == 200
         assert resp.json()["is_liked"] is False
         assert resp.json()["like_count"] == 0
+        assert resp.json()["changed"] is True
 
     async def test_like_twice_same_user(self, client: AsyncClient, auth_headers, published_article):
-        """同一用户两次点赞 = 取消点赞"""
-        resp1 = await client.post(
+        """重复点赞保持点赞状态且不重复变更。"""
+        resp1 = await client.put(
             f"/articles/{published_article.slug}/like",
+            json={"is_liked": True},
             headers=auth_headers,
         )
         assert resp1.json()["is_liked"] is True
-        resp2 = await client.post(
+        resp2 = await client.put(
             f"/articles/{published_article.slug}/like",
+            json={"is_liked": True},
             headers=auth_headers,
         )
-        assert resp2.json()["is_liked"] is False
+        assert resp2.json()["is_liked"] is True
+        assert resp2.json()["like_count"] == 1
+        assert resp2.json()["changed"] is False
 
     async def test_multiple_users(
         self, client: AsyncClient, auth_headers, published_article, other_user,
@@ -71,12 +83,14 @@ class TestToggleLike:
         other_token = create_access_token(data={"sub": other_user.username})
         other_headers = {"Authorization": f"Bearer {other_token}"}
 
-        await client.post(
+        await client.put(
             f"/articles/{published_article.slug}/like",
+            json={"is_liked": True},
             headers=auth_headers,
         )
-        resp = await client.post(
+        resp = await client.put(
             f"/articles/{published_article.slug}/like",
+            json={"is_liked": True},
             headers=other_headers,
         )
         assert resp.json()["is_liked"] is True
@@ -108,8 +122,9 @@ class TestLikeStatus:
 
     async def test_shows_liked_after_like(self, client: AsyncClient, auth_headers, published_article):
         """点赞后查询 -> is_liked=True"""
-        await client.post(
+        await client.put(
             f"/articles/{published_article.slug}/like",
+            json={"is_liked": True},
             headers=auth_headers,
         )
         resp = await client.get(
@@ -126,8 +141,9 @@ class TestLikeStatus:
         other_token = create_access_token(data={"sub": other_user.username})
         other_headers = {"Authorization": f"Bearer {other_token}"}
 
-        await client.post(
+        await client.put(
             f"/articles/{published_article.slug}/like",
+            json={"is_liked": True},
             headers=auth_headers,
         )
         resp = await client.get(
@@ -156,8 +172,9 @@ class TestMeLikeHistory:
 
     async def test_returns_history(self, client: AsyncClient, auth_headers, published_article, mock_redis, db_session):
         """点赞事件消费后历史记录可见"""
-        await client.post(
-            f"/articles/{published_article.slug}/like", headers=auth_headers,
+        await client.put(
+            f"/articles/{published_article.slug}/like",
+            json={"is_liked": True}, headers=auth_headers,
         )
         await flush_like_stream(mock_redis, db_session)
         resp = await client.get(
@@ -174,8 +191,9 @@ class TestMeLikeHistory:
 
     async def test_filter_by_target_type(self, client: AsyncClient, auth_headers, published_article):
         """按类型过滤 -> 只返回对应类型的记录"""
-        await client.post(
-            f"/articles/{published_article.slug}/like", headers=auth_headers,
+        await client.put(
+            f"/articles/{published_article.slug}/like",
+            json={"is_liked": True}, headers=auth_headers,
         )
         resp = await client.get(
             "/me/like-history", params={"target_type": "comment"}, headers=auth_headers,
@@ -185,8 +203,9 @@ class TestMeLikeHistory:
 
     async def test_returns_comment_history_details(self, client: AsyncClient, auth_headers, published_article, existing_comment, test_user, mock_redis, db_session):
         """评论点赞历史包含评论内容、原文章和作者信息"""
-        await client.post(
-            f"/comments/{existing_comment.id}/like", headers=auth_headers,
+        await client.put(
+            f"/comments/{existing_comment.id}/like",
+            json={"is_liked": True}, headers=auth_headers,
         )
         await flush_like_stream(mock_redis, db_session)
         resp = await client.get(
@@ -206,11 +225,13 @@ class TestMeLikeHistory:
 
     async def test_returns_mixed_history_without_type(self, client: AsyncClient, auth_headers, published_article, existing_comment, mock_redis, db_session):
         """不传 target_type -> 返回文章和评论混合历史"""
-        await client.post(
-            f"/articles/{published_article.slug}/like", headers=auth_headers,
+        await client.put(
+            f"/articles/{published_article.slug}/like",
+            json={"is_liked": True}, headers=auth_headers,
         )
-        await client.post(
-            f"/comments/{existing_comment.id}/like", headers=auth_headers,
+        await client.put(
+            f"/comments/{existing_comment.id}/like",
+            json={"is_liked": True}, headers=auth_headers,
         )
         await flush_like_stream(mock_redis, db_session)
         resp = await client.get(
@@ -226,8 +247,9 @@ class TestMeLikeHistory:
 
         db_session.add(Likes(user_id=test_user.id, target_type="article", target_id=999999))
         await db_session.commit()
-        await client.post(
-            f"/articles/{published_article.slug}/like", headers=auth_headers,
+        await client.put(
+            f"/articles/{published_article.slug}/like",
+            json={"is_liked": True}, headers=auth_headers,
         )
         await flush_like_stream(mock_redis, db_session)
 
@@ -253,8 +275,9 @@ class TestMeLikeHistory:
         await db_session.refresh(a2)
 
         for article in [published_article, a2]:
-            await client.post(
-                f"/articles/{article.slug}/like", headers=auth_headers,
+            await client.put(
+                f"/articles/{article.slug}/like",
+                json={"is_liked": True}, headers=auth_headers,
             )
         await flush_like_stream(mock_redis, db_session)
         resp = await client.get(
@@ -283,8 +306,9 @@ class TestUsersLikeHistory:
         other_token = create_access_token(data={"sub": other_user.username})
         other_headers = {"Authorization": f"Bearer {other_token}"}
 
-        await client.post(
-            f"/articles/{published_article.slug}/like", headers=other_headers,
+        await client.put(
+            f"/articles/{published_article.slug}/like",
+            json={"is_liked": True}, headers=other_headers,
         )
         await flush_like_stream(mock_redis, db_session)
         resp = await client.get(
@@ -307,8 +331,9 @@ class TestUsersLikeHistory:
 
     async def test_filter_by_type(self, client: AsyncClient, auth_headers, published_article, test_user):
         """按类型过滤"""
-        await client.post(
-            f"/articles/{published_article.slug}/like", headers=auth_headers,
+        await client.put(
+            f"/articles/{published_article.slug}/like",
+            json={"is_liked": True}, headers=auth_headers,
         )
         resp = await client.get(
             f"/users/{test_user.id}/like-history",

@@ -23,18 +23,18 @@ async def run_round(
     latencies = []
     statuses = Counter()
 
-    async def send() -> None:
+    async def send(is_liked: bool) -> None:
         async with semaphore:
             started = time.perf_counter()
             try:
-                response = await client.post(path)
+                response = await client.put(path, json={"is_liked": is_liked})
                 statuses[response.status_code] += 1
             except httpx.HTTPError as error:
                 statuses[type(error).__name__] += 1
             latencies.append((time.perf_counter() - started) * 1000)
 
     started = time.perf_counter()
-    await asyncio.gather(*(send() for _ in range(requests)))
+    await asyncio.gather(*(send(bool(index % 2)) for index in range(requests)))
     elapsed = time.perf_counter() - started
     return {
         "rps": requests / elapsed,

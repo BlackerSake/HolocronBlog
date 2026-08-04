@@ -27,7 +27,11 @@ async def test_reconcile_like_counts_updates_article_counter(db_session,
                                                              published_article,
                                                              mock_redis):
     """redis 点赞计数 与 文章冗余字段不一致时, 对账任务 修复likecount"""
-    await mock_redis.set(f"like:article:{published_article.id}:count", 9)
+    await mock_redis.sadd(
+        f"like:article:{published_article.id}:users",
+        *(str(user_id) for user_id in range(1, 10)),
+    )
+    await mock_redis.set(f"like:article:{published_article.id}:loaded", 1)
     fixed = await reconcile_like_counts(db_session)
     await db_session.commit()
     refreshed = await db_session.scalar(

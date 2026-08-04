@@ -32,6 +32,18 @@ class LikeStatusOut(BaseModel):
     like_count: int
     is_liked: bool
 
+
+class LikeStateIn(BaseModel):
+    """点赞目标状态"""
+
+    is_liked: bool
+
+
+class LikeMutationOut(LikeStatusOut):
+    """点赞状态修改结果"""
+
+    changed: bool
+
 class LikeHistoryOut(BaseModel):
     """点赞记录（含前端展示信息）"""
     liked_at: datetime
