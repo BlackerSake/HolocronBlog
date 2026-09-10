@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from app.core.database import get_db
-from app.core.dependencies import require_permission
+from app.core.dependencies import require_permission, invalidate_user_cache
 from app.core.log import log_call
 from app.models.role import Role
 from app.models.user import User
@@ -96,6 +96,7 @@ async def update_user_role(
     await db.commit()
     await db.refresh(user)
     await delete_user_permissions(user.id)
+    await invalidate_user_cache(user.username)
 
     return Response(data=UserWithRoleList(
         id=user.id,
@@ -148,4 +149,5 @@ async def delete_user(
 
     user.is_active = False
     await db.commit()
+    await invalidate_user_cache(user.username)
     return None

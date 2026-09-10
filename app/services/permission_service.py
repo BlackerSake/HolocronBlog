@@ -6,6 +6,7 @@
 import json
 
 from sqlalchemy import select
+from sqlalchemy.orm.exc import DetachedInstanceError
 
 from app.core.database import AsyncSessionLocal
 from app.models.user import User
@@ -26,7 +27,15 @@ async def get_current_user_permissions(user: User) -> set[str]:
     if cached:
         return cached
     # 2. redis 缓存未命中 -> 查询数据库
-    permissions = {p.name for p in user.role_obj.permissions}
+    # user 可能来自 auth 缓存(脱离 session),此时懒加载抛 DetachedInstanceError,回源 db
+    try:
+        permissions = {p.name for p in user.role_obj.permissions}
+    except DetachedInstanceError:
+        async with AsyncSessionLocal() as db:
+            db_user = await db.get(User, user.id)
+            if db_user is None:
+                return set()
+            permissions = {p.name for p in db_user.role_obj.permissions}
 
     # 3. 写入 redis
     await cache_user_permissions(user.id, permissions)

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import httpx
 
-from create_admin import create_admin
+from scripts.create_admin import create_admin
 
 
 def parse_concurrencies(value: str) -> list[int]:

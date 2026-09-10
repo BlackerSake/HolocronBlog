@@ -10,9 +10,6 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import declarative_base
 from app.core.config import settings
 
-import logging
-logging.getLogger("sqlalchemy.engine").setLevel(logging.INFO)
-
 def create_engine():
     """sql下启动 wal + busy_timeout,允许读写并发"""
     engine = create_async_engine(

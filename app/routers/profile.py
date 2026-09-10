@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, invalidate_user_cache
 from app.core.log import log_call
 from app.models.user import User
 from app.schemas.common import Response
@@ -32,12 +32,17 @@ async def update_profile(
     Returns:
         Response[UserProfileOut] — 更新后的用户资料
     """
+    # current_user 可能来自 auth 缓存(脱离 session),重新加载为 session 内对象再改
+    user = await db.get(User, current_user.id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="用户不存在")
     update_data = body.model_dump(exclude_unset=True)
     for key, value in update_data.items():
-        setattr(current_user, key, value)
+        setattr(user, key, value)
     await db.commit()
-    await db.refresh(current_user)
-    return Response(data=UserProfileOut.model_validate(current_user))
+    await db.refresh(user)
+    await invalidate_user_cache(user.username)
+    return Response(data=UserProfileOut.model_validate(user))
 
 
 @router.get("/api/v1/users/{user_id}/profile", response_model=Response[UserProfileOut])

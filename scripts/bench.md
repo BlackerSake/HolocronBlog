@@ -186,3 +186,39 @@ Transfer/sec:     62.97KB
 RPS 从 6529 → 1288，掉了 5 倍；p50 从 6.67ms → 34.74ms，慢了 5 倍。
 这两个 5 倍是同一件事：每次请求多了一次 SQL 查询，整个链路被拉长了 5 倍
 
+
+
+## 链路优化
+
+## 一次sql查询:**./scripts/bench_wrk.sh -t4 -c50 -d35s --latency http://127.0.0.1:8858/health/db**
+Running 35s test @ http://127.0.0.1:8858/health/db
+  4 threads and 50 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    31.78ms   16.42ms 194.01ms   77.85%
+    Req/Sec   390.08    132.58   777.00     73.77%
+  Latency Distribution
+     50%   28.71ms
+     75%   38.60ms
+     90%   49.84ms
+     99%   93.80ms
+  54436 requests in 35.07s, 7.84MB read
+Requests/sec:   1551.99
+Transfer/sec:    228.86KB
+## 点赞接口:**./scripts/bench_wrk.sh -t4 -c50 -d35s --latency -s scripts/bench_like.lua http://127.0.0.1:8858/articles/1111/like**
+Running 35s test @ http://127.0.0.1:8858/articles/1111/like
+  4 threads and 50 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   206.70ms  345.62ms   1.98s    85.99%
+    Req/Sec   156.73     85.94   575.00     68.44%
+  Latency Distribution
+     50%   26.74ms
+     75%  247.50ms
+     90%  710.98ms
+     99%    1.51s 
+  22045 requests in 35.09s, 4.44MB read
+  Socket errors: connect 0, read 0, write 0, timeout 95
+Requests/sec:    628.19
+Transfer/sec:    129.42KB
+
+## 结论
+一次sql查询有略微的rps损失,而点赞接口伴随着代码优化获得的2倍的rps提升

@@ -216,6 +216,7 @@ def mock_redis():
     svc.get_cached_permissions = AsyncMock(return_value=None)
     svc.cache_user_permissions = AsyncMock()
     svc.delete_user_permissions = AsyncMock()
+    svc.AsyncSessionLocal = TestAsyncSessionLocal
     import app.services.like_service as like_svc
     import app.core.like_stream as like_stream
     fake_like_redis = FakeLikeRedis()
@@ -230,6 +231,9 @@ def mock_redis():
 
     import app.core.cache_consistency as cache_consistency
     cache_consistency.redis_client = fake_like_redis
+
+    import app.core.dependencies as deps_mod
+    deps_mod.redis_client = fake_like_redis
     return fake_like_redis
 
 

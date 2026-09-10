@@ -121,13 +121,15 @@ async def get_public_article_cached(db: AsyncSession, slug: str) -> ArticleOut |
         return ArticleOut.model_validate(article) if article else None
 
 async def invalidate_article_cache(slug: str) -> None:
-    """主动失效文章详情缓存及依赖的热门文章缓存"""
+    """主动失效文章详情缓存及依赖的热门文章缓存、点赞目标映射缓存"""
+    from app.services.like_service import LIKE_TARGET_CACHE_PREFIX
     with suppress(Exception):
         await redis_client.delete(
             _article_detail_cache_key(slug),
             _article_detail_lock_key(slug),
             "hot_articles", # 兼容旧缓存key
-            ARTICLE_HOT_CACHE_KEY # 新 zset榜单的短ttl列表缓存
+            ARTICLE_HOT_CACHE_KEY, # 新 zset榜单的短ttl列表缓存
+            f"{LIKE_TARGET_CACHE_PREFIX}{slug}", # 点赞路径的 slug→目标 映射
         )
 
 async def rebuild_article_cache_batch(db: AsyncSession, slugs: list[str]) -> int:

@@ -1,5 +1,6 @@
 import asyncio
 from contextlib import suppress
+import json
 import logging
 import time
 from sqlalchemy import and_, exists, func, or_, select, update
@@ -38,6 +39,8 @@ end
 return {desired, count, changed}
 """
 
+LIKE_TARGET_CACHE_PREFIX = "cache:like_target:article:"
+LIKE_TARGET_CACHE_TTL = 60           # slug→(id, author_id, like_count) 映射 TTL,变更由 invalidate_article_cache 主动失效
 LIKE_CACHE_TTL = 60 * 30             # 缓存 TTL: 30 分钟，统一过期防止幽灵状态
 LIKE_INIT_LOCK_TTL = 5               # 预热分布式锁超时: 5 秒，防止死锁
 LIKE_REDIS_BREAKER_THRESHOLD = 5     # 连续 5 次 Redis 失败 → 熔断打开
@@ -355,6 +358,14 @@ async def get_article_like_target(
     Returns:
         文章 ID、作者 ID、数据库点赞数；文章不存在时返回 None。
     """
+    key = f"{LIKE_TARGET_CACHE_PREFIX}{slug}"
+    try:
+        cached = await redis_client.get(key)
+    except Exception:
+        cached = None  # Redis 故障 fail-open 走 db
+    if cached is not None:
+        return tuple(json.loads(cached))
+
     row = (
         await db.execute(
             select(Article.id, Article.author_id, Article.like_count).where(
@@ -364,7 +375,14 @@ async def get_article_like_target(
             )
         )
     ).one_or_none()
-    return tuple(row) if row else None
+    if row is None:
+        return None
+    target = tuple(row)
+    try:
+        await redis_client.set(key, json.dumps(target), ex=LIKE_TARGET_CACHE_TTL)
+    except Exception:
+        pass
+    return target
 
 
 async def get_comment_like_target(
