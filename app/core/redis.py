@@ -56,7 +56,9 @@ async def _sync_loop():
     按 REDIS_SYNC_INTERVAL 配置的间隔执行同步，支持优雅取消。
     """
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-    engine = create_async_engine(settings.DATABASE_URL)
+    #engine = create_async_engine(settings.DATABASE_URL)
+    from app.core.database import create_engine
+    engine = create_engine()
     session_factory = async_sessionmaker(engine, 
                                          expire_on_commit=False,
                                          class_=AsyncSession)

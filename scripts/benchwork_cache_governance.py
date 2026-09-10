@@ -7,6 +7,8 @@ from pathlib import Path
 
 import httpx
 
+from create_admin import create_admin
+
 
 def parse_concurrencies(value: str) -> list[int]:
     try:
@@ -100,11 +102,12 @@ async def warmup_connections(
         responses = await asyncio.gather(*[
             client.get(path) for _ in range(concurrency)
         ], return_exceptions=True)
-        failed = [
-            type(response).__name__ if isinstance(response, Exception) else response.status_code
-            for response in responses
-            if isinstance(response, Exception) or response.status_code != 200
-        ]
+        failed: list[str | int] = []
+        for res in responses:
+            if isinstance(res, BaseException):
+                failed.append(type(res).__name__)
+            elif res.status_code != 200:
+                failed.append(res.status_code)
         if failed:
             raise SystemExit(f"预热失败: {failed[0]} {path}")
 
@@ -166,15 +169,35 @@ def render_report(
         f"- 峰值p95延迟_ms: `{peak['p95延迟_ms']:.2f}`",
     ])
     return "\n".join(lines)
-
+async def login(
+    client: httpx.AsyncClient,
+    username: str,
+    email: str,
+    password: str,
+) -> str:
+    response = await client.post(
+        "/api/v1/login",
+        data={"username": username, "password": password},
+    )
+    if response.status_code == 401:
+        await create_admin(username, email, password)
+        response = await client.post(
+            "/api/v1/login",
+            data={"username": username, "password": password},
+        )
+    response.raise_for_status()
+    return response.json()["data"]["access_token"]
 
 async def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-url", default="http://127.0.0.1:8848")
+    parser.add_argument("--base-url", default="http://127.0.0.1:8858")
     parser.add_argument("--path", help="主题详情路径；默认自动选择第一篇公开主题")
     parser.add_argument("--concurrencies", type=parse_concurrencies, default=[10, 25, 50, 100, 200])
     parser.add_argument("--requests", type=int, default=1000, help="每个并发档位每轮请求数")
     parser.add_argument("--rounds", type=int, default=3)
+    parser.add_argument("--username", default="benchuser")
+    parser.add_argument("--email", default="bench@bench.com")
+    parser.add_argument("--password", default="benchpass123")
     parser.add_argument("--warmup", type=int, default=1, help="每个并发档位的并发预热轮数")
     parser.add_argument("--output", type=Path, help="保存 Markdown 报告")
     parser.add_argument("--min-peak-rps", type=float)
@@ -197,6 +220,9 @@ async def main() -> None:
         limits=limits,
         trust_env=False,
     ) as client:
+        token = await login(client, args.username, args.email, args.password)
+        client.headers["Authorization"] = f"Bearer {token}"
+        
         path = args.path or await discover_article_path(client)
         results = []
         for concurrency in args.concurrencies:

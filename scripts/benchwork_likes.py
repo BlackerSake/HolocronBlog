@@ -7,6 +7,8 @@ from pathlib import Path
 
 import httpx
 
+from create_admin import create_admin
+
 
 def percentile(values: list[float], fraction: float) -> float:
     ordered = sorted(values)
@@ -34,7 +36,7 @@ async def run_round(
             latencies.append((time.perf_counter() - started) * 1000)
 
     started = time.perf_counter()
-    await asyncio.gather(*(send(bool(index % 2)) for index in range(requests)))
+    await asyncio.gather(*(send(False) for index in range(requests)))
     elapsed = time.perf_counter() - started
     return {
         "rps": requests / elapsed,
@@ -45,11 +47,20 @@ async def run_round(
     }
 
 
-async def login(client: httpx.AsyncClient, username: str, password: str) -> str:
+async def login(client: httpx.AsyncClient, 
+                username: str,
+                email: str, 
+                password: str) -> str:
     response = await client.post(
         "/api/v1/login",
         data={"username": username, "password": password},
     )
+    if response.status_code == 401:
+        await create_admin(username, email, password)
+        response = await client.post(
+            "/api/v1/login",
+            data={"username": username, "password": password},
+        )
     response.raise_for_status()
     return response.json()["data"]["access_token"]
 
@@ -59,7 +70,8 @@ async def main() -> None:
     parser.add_argument("--base-url", default="http://127.0.0.1:8858")
     parser.add_argument("--slug", default="1111")
     parser.add_argument("--username", default="benchuser")
-    parser.add_argument("--password", default="Benchpass123")
+    parser.add_argument("--email", default="bench@bench.com")
+    parser.add_argument("--password", default="benchpass123")
     parser.add_argument("--concurrencies", default="10,25,50,100,200")
     parser.add_argument("--requests", type=int, default=1000)
     parser.add_argument("--rounds", type=int, default=3)
@@ -80,7 +92,7 @@ async def main() -> None:
         limits=limits,
         trust_env=False,
     ) as client:
-        token = await login(client, args.username, args.password)
+        token = await login(client, args.username, args.email, args.password)
         client.headers["Authorization"] = f"Bearer {token}"
         path = f"/articles/{args.slug}/like"
 

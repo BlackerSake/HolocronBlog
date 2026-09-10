@@ -227,7 +227,9 @@ async def _like_stream_task_loop() -> None:
     """
     await _ensure_like_group()
 
-    engine = create_async_engine(settings.DATABASE_URL)
+    #engine = create_async_engine(settings.DATABASE_URL)
+    from app.core.database import create_engine
+    engine = create_engine()
     session_factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession) # 允许 commit 后继续使用 session 中的对象
     consumer_name = f"{socket.gethostname()}:{id(asyncio.current_task())}"
 

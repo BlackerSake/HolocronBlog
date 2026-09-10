@@ -21,12 +21,11 @@ from sqlalchemy import select
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-async def create_admin():
+USERNAME = "benchuser"
+EMAIL = "benchuser@bench.com"
+PASSWORD = "benchpass123"
+async def create_admin(username, email, password):
     """创建或重置 admin 用户。"""
-    username = "admin"
-    email = "admin@example.com"
-    password = "admin123"
     async with AsyncSessionLocal() as db:
         logger.info("数据库: %s", settings.DATABASE_URL)
         existing = (await db.execute(
@@ -55,5 +54,8 @@ async def create_admin():
         db.add(admin)
         await db.commit()
         logger.info("admin用户'%s'创建成功,身份'%s'", username, admin_role.name)
+        
 if __name__ == "__main__":
-    asyncio.run(create_admin())
+    asyncio.run(create_admin(username = USERNAME,
+                             email = EMAIL,
+                             password = PASSWORD))

@@ -11,7 +11,7 @@ venv/
 .venv/
 env/
 ENV/
-
+.env.bench
 # IDE
 .vscode/
 .idea/
@@ -20,6 +20,8 @@ ENV/
 
 # Database (dev SQLite)
 *.db
+*.db-shm
+*.db-wal
 *.sqlite3
 
 # Environment
