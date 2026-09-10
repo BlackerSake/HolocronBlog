@@ -186,8 +186,6 @@ Transfer/sec:     62.97KB
 RPS 从 6529 → 1288，掉了 5 倍；p50 从 6.67ms → 34.74ms，慢了 5 倍。
 这两个 5 倍是同一件事：每次请求多了一次 SQL 查询，整个链路被拉长了 5 倍
 
-
-
 ## 链路优化
 
 ## 一次sql查询:**./scripts/bench_wrk.sh -t4 -c50 -d35s --latency http://127.0.0.1:8858/health/db**
@@ -222,3 +220,170 @@ Transfer/sec:    129.42KB
 
 ## 结论
 一次sql查询有略微的rps损失,而点赞接口伴随着代码优化获得的2倍的rps提升
+
+## 改完代码后的测试:
+`pytest -x -q` 269passed,3 warnings 不重要.算全绿
+
+更改 系统为 performance 后:`echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor` 
+再次测试:
+## 点赞接口:**./scripts/bench_wrk.sh -t4 -c50 -d35s --latency -s scripts/bench_like.lua http://127.0.0.1:8858/articles/1111/like**
+Running 35s test @ http://127.0.0.1:8858/articles/1111/like
+  4 threads and 50 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    28.88ms   85.36ms 785.57ms   94.99%
+    Req/Sec   135.80    179.95   656.00     86.36%
+  Latency Distribution
+     50%    7.61ms
+     75%   16.65ms
+     90%   37.13ms
+     99%  556.69ms
+  664 requests in 35.10s, 136.56KB read
+  Socket errors: connect 0, read 40, write 0, timeout 45
+  Non-2xx or 3xx responses: 40
+Requests/sec:     18.92
+Transfer/sec:      3.89KB
+
+*存在大量报错: sqlite3.OperationalError: database is locked*
+
+## 检查原因: 还有人在吃锁😡
+两处裸 engine：cache_consistency.py:154 和 cache_rebuild.py:39 *没改到*
+*清空脏数据*:
+之前压 article 1111 已经超过 30 分钟——点赞缓存的 30 分钟 TTL 在压测中途到期了
+*于是:*缓存重建 → 从 DB重新预热 → 但 DB 和 Redis 已经漂移（db_counter=-7）→ 重建出的集合里没有 benchuser → 下一个请求 SADD changed=1 → 通知 INSERT + XADD → 写锁排队
+
+## 点赞接口:**./scripts/bench_wrk.sh -t4 -c50 -d35s --latency -s scripts/bench_like.lua http://127.0.0.1:8858/articles/1111/like**
+Running 35s test @ http://127.0.0.1:8858/articles/1111/like
+  4 threads and 50 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   205.72ms  349.33ms   2.00s    86.18%
+    Req/Sec   132.60     82.11   490.00     68.12%
+  Latency Distribution
+     50%   26.62ms
+     75%  238.44ms
+     90%  713.87ms
+     99%    1.55s 
+  18602 requests in 35.09s, 3.74MB read
+  Socket errors: connect 0, read 0, write 0, timeout 125
+Requests/sec:    530.10
+Transfer/sec:    109.21KB
+
+## MODE=toggle:**MODE=toggle ./scripts/bench_wrk.sh -t4 -c50 -d35s --latency -s scripts/bench_like.lua http://127.0.0.1:8858/articles/1111/like**
+Running 35s test @ http://127.0.0.1:8858/articles/1111/like
+  4 threads and 50 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   207.11ms  349.11ms   2.00s    86.11%
+    Req/Sec   101.22     68.28   480.00     73.94%
+  Latency Distribution
+     50%   28.70ms
+     75%  237.17ms
+     90%  721.64ms
+     99%    1.54s 
+  14194 requests in 35.10s, 2.86MB read
+  Socket errors: connect 0, read 0, write 0, timeout 160
+Requests/sec:    404.38
+Transfer/sec:     83.30KB
+
+## 纯框架:**./scripts/bench_wrk.sh -t4 -c50 -d35s --latency http://127.0.0.1:8858/**
+Running 35s test @ http://127.0.0.1:8858/
+  4 threads and 50 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     8.98ms    6.68ms 127.36ms   90.04%
+    Req/Sec     1.45k   538.27     3.53k    64.92%
+  Latency Distribution
+     50%    7.38ms
+     75%   10.88ms
+     90%   14.84ms
+     99%   36.96ms
+  201967 requests in 35.10s, 29.66MB read
+Requests/sec:   5754.74
+Transfer/sec:    865.46KB
+## 一次sql查询:**./scripts/bench_wrk.sh -t4 -c50 -d35s --latency http://127.0.0.1:8858/health/db**
+Running 35s test @ http://127.0.0.1:8858/health/db
+  4 threads and 50 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    47.55ms   24.78ms 292.92ms   75.85%
+    Req/Sec   260.18    110.43   830.00     76.02%
+  Latency Distribution
+     50%   44.59ms
+     75%   57.63ms
+     90%   75.98ms
+     99%  135.71ms
+  36292 requests in 35.10s, 5.23MB read
+Requests/sec:   1033.96
+Transfer/sec:    152.47KB
+
+
+## 修改:
+##### ***关键:***
+**升级 redis-py 8.0** 后默认 socket_timeout 从 None 变为5s，阻塞读语义被破坏，引发 consumer 静默死亡 → 缓存预热失效 → 请求路径降级到 DB → 熔断打开 →雪崩。
+**症状**是 p99 恶化，根因在客户端默认值变更，定位手段是 py-spy + 连接参数审计。
+1.*--no-access-log 加进 bench.sh——对*
+2.*socket_timeout=None,   # redis-py 8.0 默认 5s,会杀死阻塞读(XREADGROUP/pubsub)*
+
+## 点赞接口:**./scripts/bench_wrk.sh -t4 -c50 -d35s --latency -s scripts/bench_like.lua http://127.0.0.1:8858/articles/1111/like**
+Running 35s test @ http://127.0.0.1:8858/articles/1111/like
+  4 threads and 50 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   187.93ms  329.87ms   1.99s    86.44%
+    Req/Sec   205.64    104.68     0.98k    70.18%
+  Latency Distribution
+     50%   15.56ms
+     75%  211.79ms
+     90%  661.70ms
+     99%    1.47s 
+  28980 requests in 35.05s, 5.83MB read
+  Socket errors: connect 0, read 0, write 0, timeout 106
+Requests/sec:    826.85
+Transfer/sec:    170.33KB
+
+## MODE=toggle:**MODE=toggle ./scripts/bench_wrk.sh -t4 -c50 -d35s --latency -s scripts/bench_like.lua http://127.0.0.1:8858/articles/1111/like**
+Running 35s test @ http://127.0.0.1:8858/articles/1111/like
+  4 threads and 50 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   205.30ms  351.63ms   1.97s    86.10%
+    Req/Sec   215.01    119.94     1.14k    71.93%
+  Latency Distribution
+     50%   18.02ms
+     75%  247.62ms
+     90%  722.32ms
+     99%    1.54s 
+  30195 requests in 35.06s, 6.07MB read
+  Socket errors: connect 0, read 0, write 0, timeout 77
+Requests/sec:    861.23
+Transfer/sec:    177.41KB
+
+## 再测试拐点:之前熔断导致的全链路db兜底已经解决
+## 100并发:**./scripts/bench_wrk.sh -t4 -c100 -d35s --latency   -s scripts/bench_like.lua   http://127.0.0.1:8858/articles/1111/like**
+Running 35s test @ http://127.0.0.1:8858/articles/1111/like
+  4 threads and 100 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   209.92ms  367.56ms   2.00s    85.93%
+    Req/Sec   187.82    118.10   810.00     71.49%
+  Latency Distribution
+     50%   14.31ms
+     75%  249.24ms
+     90%  761.50ms
+     99%    1.58s 
+  26428 requests in 35.06s, 5.32MB read
+  Socket errors: connect 0, read 0, write 0, timeout 414
+Requests/sec:    753.88
+Transfer/sec:    155.30KB
+## 200并发:**./scripts/bench_wrk.sh -t4 -c200 -d35s --latency   -s scripts/bench_like.lua   http://127.0.0.1:8858/articles/1111/like**
+Running 35s test @ http://127.0.0.1:8858/articles/1111/like
+  4 threads and 200 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   288.87ms  411.36ms   1.99s    83.78%
+    Req/Sec   194.72    110.34     1.02k    73.21%
+  Latency Distribution
+     50%   15.17ms
+     75%  494.87ms
+     90%  908.16ms
+     99%    1.65s 
+  27411 requests in 35.09s, 5.51MB read
+  Socket errors: connect 0, read 0, write 0, timeout 700
+Requests/sec:    781.23
+Transfer/sec:    160.93KB
+
+## 解析:
+并发翻 4 倍，吞吐不动，超时数随队列变长（106 → 414 → 700）——**CPU 到顶**容量 ≈ 800 RPS（本机、wrk同机抢核的下限值）。p50 始终 15ms 说明快路径依然快，涨的全是排队
+### **Python/SQLite 层的油水到此榨干**

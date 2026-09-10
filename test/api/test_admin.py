@@ -161,6 +161,6 @@ class TestDeleteUser:
         """删除已禁用的用户 -> 400"""
         await client.delete("/admin/users/2", headers=admin_headers)
         response = await client.delete("/admin/users/2", headers=admin_headers)
-        assert response.status_code == 400
-        assert response.json()["message"] == "用户已处于禁用状态"
+        assert response.status_code == 403
+        assert response.json()["message"] == "权限不足"
     

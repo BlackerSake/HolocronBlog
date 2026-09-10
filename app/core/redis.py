@@ -13,6 +13,7 @@ redis_client = redis.Redis(
     port=settings.REDIS_PORT, #default 6379
     db=0,
     decode_responses=True,
+    socket_timeout=None,
 )
 
 # 后台任务句柄，用于关闭

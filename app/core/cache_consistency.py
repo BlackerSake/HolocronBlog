@@ -9,6 +9,7 @@ from app.core import redis_client
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import settings
+from app.core.database import create_engine
 from app.models.article import Article
 from app.models.comment import Comment
 from app.models.like import Likes
@@ -151,7 +152,8 @@ async def run_cache_consistency_once(db: AsyncSession) -> dict[str, int]:
 
 async def _cache_consistency_loop() -> None:
     """定时运行缓存一致性对账任务"""
-    engine = create_async_engine(settings.DATABASE_URL)
+    engine = create_engine()
+    #engine = create_async_engine(settings.DATABASE_URL)
     session_factory = async_sessionmaker(engine, expire_on_commit=False,class_=AsyncSession)
 
     try:

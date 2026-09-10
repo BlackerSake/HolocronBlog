@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import settings
+from app.core.database import create_engine
 from app.models.article import Article
 from app.services.article_cache_service import rebuild_article_cache_batch
 logger = logging.getLogger(__name__)
@@ -36,7 +37,8 @@ async def rebuild_hot_article_caches(db: AsyncSession) -> int:
 
 async def _cache_rebuild_loop() -> None:
     """定期重建热点文章缓存"""
-    engine = create_async_engine(settings.DATABASE_URL)
+    engine = create_engine()
+    #engine = create_async_engine(settings.DATABASE_URL)
     session_factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
     try:

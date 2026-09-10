@@ -4,7 +4,7 @@ import asyncio
 import socket
 from sqlalchemy import delete, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from redis.exceptions import ResponseError
+from redis.exceptions import ResponseError, TimeoutError as RedisTimeoutError
 from typing import cast
 from app.core.config import settings
 from app.core.redis import redis_client
@@ -150,13 +150,17 @@ async def _read_messages(consumer_name: str) -> list[tuple[str, dict]]:
     if pending:
         return pending
     # 2. 如果没有过期的 Pending 消息, 则读取新的消息
-    streams = await redis_client.xreadgroup(
-        LIKE_GROUP,
-        consumer_name,
-        {LIKE_STREAM: ">"},
-        count=LIKE_BATCH_SIZE,
-        block=LIKE_BLOCK_MS,
-    )
+    # 阻塞读可能撞上客户端 socket 超时: 视为空轮询,下轮重试
+    try:
+        streams = await redis_client.xreadgroup(
+            LIKE_GROUP,
+            consumer_name,
+            {LIKE_STREAM: ">"},
+            count=LIKE_BATCH_SIZE,
+            block=LIKE_BLOCK_MS,
+        )
+    except RedisTimeoutError:
+        return []
     return _flatten(streams)
 
 async def _persist_latest_states(db: AsyncSession,
