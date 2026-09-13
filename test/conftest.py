@@ -219,9 +219,11 @@ def mock_redis():
     svc.AsyncSessionLocal = TestAsyncSessionLocal
     import app.services.like_service as like_svc
     import app.core.like_stream as like_stream
+    import app.core.notification_stream as notification_stream
     fake_like_redis = FakeLikeRedis()
     like_svc.redis_client = fake_like_redis
     like_stream.redis_client = fake_like_redis
+    notification_stream.redis_client = fake_like_redis
     # 各路由模块在 import 时已拿到原始函数引用，需在自身命名空间也 mock
     import app.routers.admin as admin_mod
     admin_mod.delete_user_permissions = AsyncMock()

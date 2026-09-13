@@ -19,6 +19,7 @@ from app.middleware.rate_limit import rate_limit_middleware
 from app.core.redis import start_sync_task, stop_sync_task
 from app.core.seed import seed_default_roles
 from app.core.like_stream import start_like_stream_task, stop_like_stream_task
+from app.core.notification_stream import start_notification_stream_task, stop_notification_stream_task
 from app.services.like_service import start_like_warm_listener, stop_like_warm_listener
 from app.core.cache_rebuild import start_cache_rebuild_task, stop_cache_rebuild_task
 from app.core.cache_consistency import start_cache_consistency_task, stop_cache_consistency_task
@@ -45,12 +46,14 @@ async def lifespan(app: FastAPI):
         await start_cache_consistency_task()
         if settings.LIKE_STREAM_IN_PROCESS:
             await start_like_stream_task()
+            await start_notification_stream_task()
 
     yield # 应用运行期间
 
     if settings.BACKGROUND_TASKS_ENABLED:
         if settings.LIKE_STREAM_IN_PROCESS:
             await stop_like_stream_task()
+            await stop_notification_stream_task()
         await stop_sync_task()
         await stop_like_warm_listener()
         await stop_cache_rebuild_task()

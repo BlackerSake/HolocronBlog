@@ -14,6 +14,17 @@ async def flush_like_stream(mock_redis, db_session):
     mock_redis.streams[LIKE_STREAM] = []
 
 
+async def flush_notification_stream(mock_redis, db_session):
+    """测试辅助：模拟后台 consumer 将 fake Redis 通知 Stream 落库。"""
+    from app.core.notification_stream import NOTIFICATION_STREAM, _persist_notifications
+
+    messages = list(mock_redis.streams.get(NOTIFICATION_STREAM, []))
+    if not messages:
+        return
+    await _persist_notifications(db_session, messages)
+    mock_redis.streams[NOTIFICATION_STREAM] = []
+
+
 class TestSetLikeState:
     """PUT /articles/{slug}/like"""
 
@@ -76,7 +87,7 @@ class TestSetLikeState:
 
     async def test_multiple_users(
         self, client: AsyncClient, auth_headers, published_article, other_user,
-        db_session,
+        db_session, mock_redis,
     ):
         """不同用户各自点赞 -> like_count 累加"""
         from app.core.security import create_access_token
@@ -95,6 +106,7 @@ class TestSetLikeState:
         )
         assert resp.json()["is_liked"] is True
         assert resp.json()["like_count"] == 2
+        await flush_notification_stream(mock_redis, db_session)
         from app.services.notification_service import get_unread_notifications_count
         assert await get_unread_notifications_count(db_session, published_article.author_id) == 1
 

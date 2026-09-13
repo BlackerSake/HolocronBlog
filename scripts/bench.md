@@ -1,8 +1,8 @@
 # 点赞热 Key 并发压测报告
     2026-09-10 CST 上午10:37:13
-- 目标：`http://127.0.0.1:8858/articles/1111/like`
-- 每档：`1000` 请求 × `3` 轮,取中位数
-- 模型：单用户、单文章热 Key,关闭接口限流
+- 目标:`http://127.0.0.1:8858/articles/1111/like`
+- 每档:`1000` 请求 × `3` 轮,取中位数
+- 模型:单用户、单文章热 Key,关闭接口限流
 
 | 并发 | RPS | 平均延迟 ms | p95 ms | p99 ms | 成功率 | 状态码 |
 |---:|---:|---:|---:|---:|---:|:---|
@@ -12,29 +12,29 @@
 | 100 | 75.94 | 1257.44 | 3842.20 | 5947.26 | 100.00% | `{200: 3000}` |
 | 200 | 59.44 | 3044.58 | 9351.27 | 13440.75 | 99.97% | `{200: 2999, 'ReadError': 1}` |
 
-- 压测后点赞状态：`{'target_type': 'article', 'target_id': 1, 'like_count': 1, 'is_liked': False}`
+- 压测后点赞状态:`{'target_type': 'article', 'target_id': 1, 'like_count': 1, 'is_liked': False}`
 
-压测失败：存在非 200 响应
+压测失败:存在非 200 响应
 
 ## 解析
-并发 10 -> 25,RPS 从 184 跌到 73,之后稳定在 ~75,延迟随并发线性增长（100 并发时 100/76 ≈ 1.3s,符合Little's Law）.这不是"没到瓶颈",而是已经撞墙且墙是争抢型的：吞吐量随并发上升反而下降,是典型的单写者锁争用特征.  
-**墙在哪？**注意压测脚本：bool(index % 2) —— 每个请求都在切换点赞状态,每个请求都 
-changed=True,于是每个请求都走到 routers/likes.py:62 的 create_notification(db, ...)：同步 INSERT + commit 到 SQLite.再加上 Stream consumer 同时在后台批量写 likes 表抢同一把写锁.*看起来以为在压 Redis点赞链路,实际在压 SQLite 的 fsync 和文件锁*.SQLite 非 WAL 模式下写事务全局串行,写者多了互相busy-wait,读者还被阻塞——并发越高越慢,完全对上曲线.
+并发 10 -> 25,RPS 从 184 跌到 73,之后稳定在 ~75,延迟随并发线性增长（100 并发时 100/76 ≈ 1.3s,符合Little's Law）.这不是"没到瓶颈",而是已经撞墙且墙是争抢型的:吞吐量随并发上升反而下降,是典型的单写者锁争用特征.  
+**墙在哪？**注意压测脚本:bool(index % 2) —— 每个请求都在切换点赞状态,每个请求都 
+changed=True,于是每个请求都走到 routers/likes.py:62 的 create_notification(db, ...):同步 INSERT + commit 到 SQLite.再加上 Stream consumer 同时在后台批量写 likes 表抢同一把写锁.*看起来以为在压 Redis点赞链路,实际在压 SQLite 的 fsync 和文件锁*.SQLite 非 WAL 模式下写事务全局串行,写者多了互相busy-wait,读者还被阻塞——并发越高越慢,完全对上曲线.
 
 ## 更改
-1. 把脚本里的 bool(index % 2) 改成 True（恒点赞,第二次起 changed=False,不走通知写库）,重跑并发50.如果 RPS 跳到几百上千,锁死结论：瓶颈就是通知的同步写.这两个数字（幂等路径 vs
+1. 把脚本里的 bool(index % 2) 改成 True（恒点赞,第二次起 changed=False,不走通知写库）,重跑并发50.如果 RPS 跳到几百上千,锁死结论:瓶颈就是通知的同步写.这两个数字（幂等路径 vs
 切换路径）都值得测.
 1. sqlite3 holocron.db "PRAGMA journal_mode;" — 大概率是 delete,不是 wal.
 
-  检查两处压测客户端：确认服务确实是 --workers 4 起的；
+  检查两处压测客户端:确认服务确实是 --workers 4 起的；
   httpx.AsyncClient 默认max_keepalive_connections=20,高并发档会客户端侧排队污染延迟,建 client 时加 limits=httpx.Limits(max_connections=300, max_keepalive_connections=300).
 
 # 点赞热 Key 并发压测报告
 ### **把脚本里的 bool(index % 2) 改成 True（恒点赞）**
 ```
-- 目标：`http://127.0.0.1:8858/articles/1111/like`
-- 每档：`1000` 请求 × `3` 轮,取中位数
-- 模型：单用户、单文章热 Key,关闭接口限流
+- 目标:`http://127.0.0.1:8858/articles/1111/like`
+- 每档:`1000` 请求 × `3` 轮,取中位数
+- 模型:单用户、单文章热 Key,关闭接口限流
 
 | 并发 | RPS | 平均延迟 ms | p95 ms | p99 ms | 成功率 | 状态码 |
 |---:|---:|---:|---:|---:|---:|:---|
@@ -44,13 +44,13 @@ changed=True,于是每个请求都走到 routers/likes.py:62 的 create_notifica
 | 100 | 113.74 | 820.44 | 2413.23 | 3766.89 | 100.00% | `{200: 3000}` |
 | 200 | 97.57 | 1868.40 | 5558.14 | 8018.90 | 100.00% | `{200: 3000}` |
 
-- 压测后点赞状态：`{'target_type': 'article', 'target_id': 1, 'like_count': 2, 'is_liked': True}`
+- 压测后点赞状态:`{'target_type': 'article', 'target_id': 1, 'like_count': 2, 'is_liked': True}`
 ```
 ### **把脚本里的 bool(index % 2) 改成 False**
 ```
-- 目标：`http://127.0.0.1:8858/articles/1111/like`
-- 每档：`1000` 请求 × `3` 轮,取中位数
-- 模型：单用户、单文章热 Key,关闭接口限流
+- 目标:`http://127.0.0.1:8858/articles/1111/like`
+- 每档:`1000` 请求 × `3` 轮,取中位数
+- 模型:单用户、单文章热 Key,关闭接口限流
 
 | 并发 | RPS | 平均延迟 ms | p95 ms | p99 ms | 成功率 | 状态码 |
 |---:|---:|---:|---:|---:|---:|:---|
@@ -60,7 +60,7 @@ changed=True,于是每个请求都走到 routers/likes.py:62 的 create_notifica
 | 100 | 96.98 | 971.74 | 2792.34 | 4107.61 | 100.00% | `{200: 3000}` |
 | 200 | 78.65 | 2326.77 | 7296.22 | 10143.84 | 100.00% | `{200: 3000}` |
 
-- 压测后点赞状态：`{'target_type': 'article', 'target_id': 1, 'like_count': 1, 'is_liked': False}`
+- 压测后点赞状态:`{'target_type': 'article', 'target_id': 1, 'like_count': 1, 'is_liked': False}`
 ```
 
 
@@ -113,7 +113,7 @@ changed=True,于是每个请求都走到 routers/likes.py:62 的 create_notifica
 ```
 ## 结论
 由 GET / 数据可知,即使是纯框架路径,c=50.cpu跑到86%, rps也只有323.绝大部分是压测客户端自己忙不过来——asyncio 单线程的 httpx 客户端在 50 并发下 CPU饱和,请求在客户端排队,**把客户端的排队时间测成了服务端延迟**
-这也解释了之前所有的怪象：
+这也解释了之前所有的怪象:
   - 点赞路径 45ms 的"地板" —— 是客户端开销
   - RPS 随并发上升反而下降 —— 并发越高,客户端事件循环越忙,每个连接的服务越慢
   - like-status 在 c=5（CPU 57%,没饱和）时平均延迟 19ms —— 这才是真实服务端延迟的量级,而且 19ms里可能还带着客户端开销
@@ -142,7 +142,7 @@ status_code 分析
 ## **SQLite 非 WAL 模式下,写事务锁住整个数据库文件,连 SELECT 都被阻塞** 
 绝大多数请求很快,一小撮请求卡到天荒地老: *典型的锁竞争*  
 51 RPS + 256 个超时 + 153 个 500,这就是 SQLite 的真实天花板  
-## 修法：
+## 修法:
 **WAL + busy_timeout,一个共享 engine 工厂: @app/core/database.py 16~32**
 
 ### 纯框架:**./scripts/bench_wrk.sh -t4 -c50 -d35s --latency http://127.0.0.1:8858/**
@@ -196,11 +196,11 @@ Transfer/sec:     62.97KB
 ```
 ## 结论
 **这才是真正的数据!**  
-**纯框架：6529 RPS**: *这是上限.FastAPI + Uvicorn,本地回环,-c50,什么业务逻辑都没有,就是路由 + 序列化 + 返回*
+**纯框架:6529 RPS**: *这是上限.FastAPI + Uvicorn,本地回环,-c50,什么业务逻辑都没有,就是路由 + 序列化 + 返回*
 
-**一次 SQL 查询**：1288 RPS
+**一次 SQL 查询**:1288 RPS
 RPS 从 6529 -> 1288,掉了 5 倍；p50 从 6.67ms -> 34.74ms,慢了 5 倍.
-这两个 5 倍是同一件事：每次请求多了一次 SQL 查询,整个链路被拉长了 5 倍
+这两个 5 倍是同一件事:每次请求多了一次 SQL 查询,整个链路被拉长了 5 倍
 
 ## 链路优化
 
@@ -266,7 +266,7 @@ Transfer/sec:      3.89KB
 *存在大量报错: sqlite3.OperationalError: database is locked*  
 
 ## 检查原因: 还有人在吃锁😡
-两处裸 engine：cache_consistency.py:154 和 cache_rebuild.py:39 *没改到*
+两处裸 engine:cache_consistency.py:154 和 cache_rebuild.py:39 *没改到*
 *清空脏数据*:
 之前压 article 1111 已经超过 30 分钟——点赞缓存的 30 分钟 TTL 在压测中途到期了
 *于是:*缓存重建 -> 从 DB重新预热 -> 但 DB 和 Redis 已经漂移（db_counter=-7）-> 重建出的集合里没有 benchuser -> 下一个请求 SADD changed=1 -> 通知 INSERT + XADD -> 写锁排队
@@ -538,3 +538,102 @@ Transfer/sec:    208.07KB
 PostgreSQL 则可以让多个事务并发执行,通过行级锁、MVCC 等机制减少不必要的全局阻塞.    
 点赞场景恰好是写入密集 + 短事务——单个事务很快,但并发度高.SQLite 的锁粒度让这些快事务被迫串成一条线,吞吐上限被死死钉在"单事务耗时 × 串行度"上  
 
+# 代码更新修改:
+更新了likes路由中的通知创建逻辑，从直接调用create_notification -> 改为使用append_notification_event将通知事件添加到流中进行异步处理.
+将点赞接口的请求路径净化,不在包含通知落库链路,后者(INSERT + commit + 推送接收者 WebSocket)被挪进了消费者
+
+### 纯框架:**./scripts/bench_wrk.sh -t4 -c50 -d35s --latency http://127.0.0.1:8858/**
+不进行测试,代码未涉及改动
+
+### 一次sql查询:**./scripts/bench_wrk.sh -t4 -c50 -d35s --latency http://127.0.0.1:8858/health/db**
+不进行测试,代码未涉及改动
+
+### 点赞链路:**./scripts/bench_wrk.sh -t4 -c50 -d35s --latency -s scripts/bench_like.lua http://127.0.0.1:8858/articles/1111/like**
+```
+(HolocronBlog) j0hnny@the-only-skywalker:/Alpha/College_new/HolocronBlog$ ./scripts/bench_wrk.sh -t4 -c50 -d35s --la
+tency   -s scripts/bench_like.lua   http://127.0.0.1:8858/
+articles/1111/like
+Running 35s test @ http://127.0.0.1:8858/articles/1111/like
+  4 threads and 50 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    27.00ms   16.81ms 267.38ms   87.54%
+    Req/Sec   468.05    182.84     1.84k    63.56%
+  Latency Distribution
+     50%   21.98ms
+     75%   31.36ms
+     90%   45.41ms
+     99%   85.23ms
+  66036 requests in 35.07s, 13.29MB read
+Requests/sec:   1882.77
+Transfer/sec:    387.87KB
+```
+
+### MODE=toggle:**MODE=toggle ./scripts/bench_wrk.sh -t4 -c50 -d35s --latency -s scripts/bench_like.lua http://127.0.0.1:8858/articles/1111/like**
+```
+Running 35s test @ http://127.0.0.1:8858/articles/1111/like
+  4 threads and 50 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    25.64ms   12.45ms 285.65ms   88.42%
+    Req/Sec   478.35    142.49     2.10k    65.84%
+  Latency Distribution
+     50%   23.47ms
+     75%   30.23ms
+     90%   37.26ms
+     99%   55.90ms
+  67516 requests in 35.09s, 13.58MB read
+Requests/sec:   1924.31
+Transfer/sec:    396.43KB
+```
+## 再测试拐点
+### 100并发:**./scripts/bench_wrk.sh -t4 -c100 -d35s --latency   -s scripts/bench_like.lua   http://127.0.0.1:8858/articles/1111/like**
+```
+Running 35s test @ http://127.0.0.1:8858/articles/1111/like
+  4 threads and 100 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    65.88ms   27.61ms 343.74ms   74.76%
+    Req/Sec   385.37    124.81     1.37k    71.46%
+  Latency Distribution
+     50%   61.59ms
+     75%   80.01ms
+     90%   98.94ms
+     99%  156.39ms
+  54497 requests in 35.09s, 10.96MB read
+Requests/sec:   1553.08
+Transfer/sec:    319.96KB
+```
+
+### 200并发:**./scripts/bench_wrk.sh -t4 -c200 -d35s --latency   -s scripts/bench_like.lua   http://127.0.0.1:8858/articles/1111/like**
+```
+Running 35s test @ http://127.0.0.1:8858/articles/1111/like
+  4 threads and 200 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   150.54ms   95.45ms   1.48s    91.58%
+    Req/Sec   352.40    128.39     1.71k    79.94%
+  Latency Distribution
+     50%  132.77ms
+     75%  169.38ms
+     90%  216.35ms
+     99%  620.52ms
+  49920 requests in 35.08s, 10.04MB read
+Requests/sec:   1423.18
+Transfer/sec:    293.20KB
+```
+
+
+# 解析 
+
+| 测试 | 同步通知 RPS | 同步通知 p99 | 异步通知 RPS | 异步通知 p99 | 变化 |
+|---:|---:|---:|---:|---:|---|
+| 点赞链路 | 1087.04 | 141.45 ms | 1882.77 | 85.23 ms | RPS ×1.73 · p99 −40% |
+| toggle | 1153.84 | 129.48 ms | 1924.31 | 55.90 ms | RPS ×1.67 · p99 −57% |
+| 100并发 | 1037.83 | 282.46 ms | 1553.08 | 156.39 ms | RPS ×1.50 · p99 −45% |
+| 200并发 | 1009.97 | 691.40 ms | 1423.18 | 620.52 ms | RPS ×1.41 · p99 −10% |
+
+**核心收益**:点赞链路 RPS ×1.73、p99 −40%；toggle RPS ×1.67、p99 −57%.请求路径已无任何同步 DB 写入:认证 + 4 次 Redis 往返 + Lua EVAL + 一次通知 XADD.
+纯框架 / 一次SQL 是未受改动的基线,未测试.
+
+脚本`auto_bench.sh`跑多轮(toggle)得平均:  
+METRIC             median            min            max  
+RPS               1853.90        1842.60        2124.22  
+p50_ms             25.900         21.500         25.980  
+p99_ms             42.140         41.390         52.150  

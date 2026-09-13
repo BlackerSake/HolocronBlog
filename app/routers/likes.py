@@ -15,7 +15,7 @@ from app.services.like_service import (
     get_like_status_cached,
     get_user_history_likes,
 )
-from app.services.notification_service import create_notification
+from app.core.notification_stream import append_notification_event
 
 
 router = APIRouter()
@@ -60,8 +60,7 @@ async def set_article_like_state(
     )
 
     if status["is_liked"] and status["changed"]:
-        await create_notification(
-            db,
+        await append_notification_event(
             initiator_id=current_user.id,
             recipient_id=author_id,
             type="like_article",
@@ -115,8 +114,7 @@ async def set_comment_like_state(
         payload.is_liked,
     )
     if status["is_liked"] and status["changed"]:
-        await create_notification(
-            db,
+        await append_notification_event(
             initiator_id=current_user.id,
             recipient_id=author_id,
             type="like_comment",
