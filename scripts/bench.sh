@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 set -a
 source .env.bench
 set +a
