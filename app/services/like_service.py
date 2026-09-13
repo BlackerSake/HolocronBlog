@@ -343,7 +343,8 @@ async def update_like_count(db: AsyncSession,
     ## 更新点赞的统一入口
     """
     await _update_target_count(db, target_id, target_type, delta)
-
+import itertools
+_cache_stats = {"hit": 0, "miss": 0}
 async def get_article_like_target(
     db: AsyncSession,
     slug: str,
@@ -364,8 +365,9 @@ async def get_article_like_target(
     except Exception:
         cached = None  # Redis 故障 fail-open 走 db
     if cached is not None:
+        _cache_stats["hit"] += 1
         return tuple(json.loads(cached))
-
+    _cache_stats["miss"] += 1
     row = (
         await db.execute(
             select(Article.id, Article.author_id, Article.like_count).where(

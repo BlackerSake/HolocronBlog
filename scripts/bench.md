@@ -632,8 +632,91 @@ Transfer/sec:    293.20KB
 **核心收益**:点赞链路 RPS ×1.73、p99 −40%；toggle RPS ×1.67、p99 −57%.请求路径已无任何同步 DB 写入:认证 + 4 次 Redis 往返 + Lua EVAL + 一次通知 XADD.
 纯框架 / 一次SQL 是未受改动的基线,未测试.
 
-脚本`auto_bench.sh`跑多轮(toggle)得平均:  
-METRIC             median            min            max  
-RPS               1853.90        1842.60        2124.22  
-p50_ms             25.900         21.500         25.980  
-p99_ms             42.140         41.390         52.150  
+### 脚本`auto_bench.sh`基本条件5轮(toggle)得平均:  
+|METRIC             |median            |min            |max |
+|-----:|-----:|-----:|:-----|
+|RPS              |1738.36    |    1374.51   |     2169.22|
+|p50_ms          |   26.820      |   19.460  |       30.610|
+|p99_ms          |   59.700     |    53.060    |    141.140|
+### 脚本`auto_bench.sh`基本条件5轮(fixed)得平均: 
+
+|METRIC             |median            |min            |max |
+|-----:|-----:|-----:|:-----|
+|RPS           |    1997.95     |   1792.23     |   2141.95|
+|p50_ms         |    23.890      |   21.580     |    26.600|
+|p99_ms         |    55.300     |    41.380     |    59.510|
+
+### 脚本大致命令如下:
+
+```bash
+sleep 30s
+set -a; source .env.bench; set +a
+redis-cli FLUSHDB
+wrk -t1 -c1 -d5s \
+    --latency \
+    -s scripts/bench_like.lua \
+    http://127.0.0.1:8858/articles/1111/like
+
+redis-cli EXISTS like:article:1:loaded
+
+MODE=toggle ./scripts/bench_wrk.sh \
+    -t4 -c50 -d35s \
+    --latency \
+    -s scripts/bench_like.lua \
+    http://127.0.0.1:8858/articles/1111/like
+```
+
+## 再排查
+> 控制变量为 并发数,其他为基本值
+### 确认点赞链路
+一次 `PUT/articles/{slug}/like` 包含链路:
+```
+  JWT 认证
+    ↓
+  get_article_like_target
+    ├─ Redis GET
+    └─ 缓存 miss 时才查 PostgreSQL
+    ↓
+  change_like_status_cached
+    ├─ 检查点赞缓存是否已加载
+    ├─ 必要时预热缓存
+    ├─ Redis Lua：
+    │   ├─ SADD / SREM
+    │   ├─ SCARD
+    │   └─ XADD
+    ├─ 更新文章热度
+    └─ 返回状态
+    ↓
+  异步通知 Stream
+    ↓
+  WebSocket 通知
+    ↓
+  Pydantic 响应序列化
+```
+
+
+### 50 并发
+METRIC             median            min            max
+RPS               1688.80        1518.77        1884.37
+p50_ms             28.110         24.340         30.080
+p99_ms             69.860         56.620         82.230
+### 100 并发
+METRIC             median            min            max
+RPS               1825.35        1471.23        2295.22
+p50_ms             54.530         39.060         67.640
+p99_ms            126.750        106.710        172.010
+### 200 并发
+METRIC             median            min            max
+RPS               2161.80        1964.84        2195.43
+p50_ms             87.910         86.570         99.930
+p99_ms            222.660        212.950        255.150
+### 300并发
+METRIC             median            min            max
+RPS               2207.27        2047.27        2334.06
+p50_ms            130.650        120.340        145.730
+p99_ms            305.110        300.200        313.480
+### 400并发
+METRIC             median            min            max
+RPS               2151.01        2036.28        2288.19
+p50_ms            178.680        163.370        194.920
+p99_ms            428.600        398.940        901.720
