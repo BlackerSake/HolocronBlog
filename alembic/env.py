@@ -18,7 +18,6 @@ import app.models  # noqa: F401 — registers all tables on Base.metadata
 # 将异步驱动 URL 转为 Alembic 可用的同步 URL
 sync_db_url = (
     settings.DATABASE_URL
-    .replace("sqlite+aiosqlite://", "sqlite://")
     .replace("postgresql+asyncpg://", "postgresql://")
 )
 

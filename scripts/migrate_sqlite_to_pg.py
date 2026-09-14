@@ -60,23 +60,36 @@ TABLES: dict[str, tuple[list[str], set[str], set[str], set[str]]] = {
 SERIAL_TABLES = [t for t in TABLES if t not in ("role_permission", "article_tags")]
 
 
+from zoneinfo import ZoneInfo
+
+LOCAL_TZ = ZoneInfo("Asia/Shanghai")
+
 def _convert(table: str, col: str, value):
-    """把 SQLite 的值转成 asyncpg 能编码的 Python 类型。"""
     if value is None:
         return None
     _, bools, naivedt, tzdt = TABLES[table]
     if col in bools:
-        return bool(int(value))  # SQLite 布尔以 0/1 存储
-    if col in naivedt or col in tzdt:
-        try:
-            dt = datetime.fromisoformat(value)
-        except ValueError as exc:
-            raise ValueError(f"无法解析时间 {table}.{col}={value!r}") from exc
-        if col in tzdt and dt.tzinfo is None:
-            return dt.replace(tzinfo=timezone.utc)  # 带时区列补 UTC
-        if col in naivedt and dt.tzinfo is not None:
-            return dt.replace(tzinfo=None)  # 无时区列剥掉偏移
-        return dt
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        s = str(value).strip().lower()
+        if s in ("1", "true", "t", "yes"):
+            return True
+        if s in ("0", "false", "f", "no", ""):
+            return False
+        raise ValueError(f"无法解析布尔 {table}.{col}={value!r}")
+    if col in tzdt or col in naivedt:
+        dt = datetime.fromisoformat(value) if isinstance(value, str) else value
+        if col in tzdt:
+            if dt.tzinfo is None:
+                # ← 关键：naive 视为 LOCAL_TZ
+                dt = dt.replace(tzinfo=LOCAL_TZ)
+            return dt.astimezone(timezone.utc)
+        # naivedt 列
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(LOCAL_TZ)
+        return dt.replace(tzinfo=None)
     return value
 
 

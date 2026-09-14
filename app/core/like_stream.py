@@ -161,6 +161,11 @@ async def _read_messages(consumer_name: str) -> list[tuple[str, dict]]:
         )
     except RedisTimeoutError:
         return []
+    except ResponseError as e:
+        if "NOGROUP" in str(e):
+            await _ensure_like_group()
+            return []
+        raise
     return _flatten(streams)
 
 async def _persist_latest_states(db: AsyncSession,

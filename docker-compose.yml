@@ -1,4 +1,22 @@
 services:
+  db:
+    image: postgres:16-alpine
+    container_name: holocron-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: skywalker
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: holocron
+    ports:
+      - "15432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U skywalker -d holocron"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   redis:
     image: redis:alpine
     command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
@@ -7,21 +25,25 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+
   api:
     build: .
     ports:
       - "8848:8848"
     environment:
-      - DATABASE_URL=sqlite+aiosqlite:///./data/holocron.db
-      - SECRET_KEY=${SECRET_KEY:-holocron_secret_key}
+      - DATABASE_URL=postgresql+asyncpg://skywalker:${POSTGRES_PASSWORD}@db:5432/holocron
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY is required}
       - ALGORITHM=HS256
       - ACCESS_TOKEN_EXPIRE_MINUTES=30
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     depends_on:
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
     volumes:
-      - ./data:/app/data
+      - ./data:/app/data   # 如果不再用 sqlite，这行可以删
 
   frontend:
     build: frontend
@@ -31,4 +53,5 @@ services:
       - api
 
 volumes:
+  pg_data:
   redis_data:

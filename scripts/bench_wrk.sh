@@ -10,7 +10,4 @@ fi
 exec wrk "$@"
 #先启动 bench.sh: ./scripts/bench.sh
 #then 
-# ./scripts/bench_wrk.sh -t4 -c50 -d35s --latency -s scripts/bench_like.lua http://127.0.0.1:8858/articles/1111/like
-
-
-# ./scripts/bench_wrk.sh -t4 -c50 -d35s --latency -s scripts/bench_like.lua http://127.0.0.1:8858/articles/1111/like
+# MODE=toggle ./scripts/bench_wrk.sh -t4 -c300 -d35s --latency -s scripts/bench_like.lua http://127.0.0.1:8858/articles/1111/like

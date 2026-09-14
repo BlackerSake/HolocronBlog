@@ -11,11 +11,11 @@
 set -uo pipefail
 
 
-RUNS="${RUNS:-5}"
+RUNS="${RUNS:-1}"
 THREADS="${THREADS:-4}"
 CONNECTIONS="${CONNECTIONS:-300}"
 DURATION="${DURATION:-35s}"
-WARMUP="${WARMUP:-5s}"
+WARMUP="${WARMUP:-10s}"
 LUA="scripts/bench_like.lua"
 
 # 加载 bench 配置：DATABASE_URL=PG、BENCH_PORT、BENCH_USER/PASSWORD、BENCH_WORKERS…
@@ -92,8 +92,10 @@ for i in $(seq 1 "$RUNS"); do
 
   # 清空 Redis（auth / target / like 缓存 + like:events + like:notification:events 一起清）
   redis-cli FLUSHDB >/dev/null
-  log "sleep 30s"
-  sleep 30s
+  if [[ "$i" != "1" ]]; then
+    log "sleep 30s"
+    sleep 30
+  fi
   # 先单连接预热，避免 FLUSHDB 后多 worker 同时击穿点赞缓存
   log "warmup ${WARMUP} (single connection) ..."
   wrk -t1 -c1 -d"$WARMUP" \
@@ -141,5 +143,7 @@ printf '%-10s %14.3f %14.3f %14.3f\n' \
 printf '%-10s %14.3f %14.3f %14.3f\n' \
   p99_ms "$(median "${p99_list[@]}")" "$(minv "${p99_list[@]}")" "$(maxv "${p99_list[@]}")"
 
-log "（FastAPI 仍在后台运行，pid=$SERVER_PID，如需停止: kill $SERVER_PID）"
-command kill $SERVER_ID
+log "（FastAPI 仍在后台运行，pid=$SERVER_PID，10s 后kill）"
+log "sleep 10s"
+sleep 10
+kill $SERVER_PID

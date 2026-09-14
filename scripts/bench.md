@@ -720,3 +720,125 @@ METRIC             median            min            max
 RPS               2151.01        2036.28        2288.19
 p50_ms            178.680        163.370        194.920
 p99_ms            428.600        398.940        901.720
+
+
+# 基准线:300conn
+[09:22:33] =================== SUMMARY ===================
+METRIC             median            min            max
+RPS               2105.45        2045.26        2181.92
+p50_ms            137.260        134.090        142.620
+p99_ms            294.770        269.480        298.190
+
+## 检查 redis stream
+**为什么消费者会影响rps?**
+> 点赞请求本身会往两个stream写消息: 1. like:events 2. like: notification:events
+> 后台消费者在做什么? 
+> 读取 stream -> 查询db -> INSERT/DELETE 点赞 -> 更新 like_count -> 创建通知 -> ack
+测压前:
+```shell
+redis-cli XINFO STREAM like:events
+redis-cli XINFO STREAM like:notification:events
+```
+得到数据:
+
+
+### 对比表 1：like:events
+
+| 字段             | 压测前（时刻 2） | 压测后（时刻 3） | 变化          |
+| ---------------- | ---------------- | ---------------- | ------------- |
+| group name       | like-db-writers  | like-db-writers  | 不变          |
+| consumers        | 4                | 4                | 不变          |
+| **pending**      | 0                | 764              | +764          |
+| last-delivered-id| 0-0              | 1789363167555-0  | 已推进        |
+| entries-read     | (nil)            | 27790            | 从 0 到 27790 |
+| **lag**          | 0                | 0                | 无落后        |
+### 对比表 2：like:notification:events
+| 字段             | 压测前（时刻 2）        | 压测后（时刻 3）        | 变化         |
+| ---------------- | ----------------------- | ----------------------- | ------------ |
+| group name       | notification-db-writers | notification-db-writers | 不变         |
+| consumers        | 4                       | 4                       | 不变         |
+| **pending**      | 0                       | 183                     | +183         |
+| last-delivered-id| 0-0                     | 1789363150169-0         | 已推进       |
+| entries-read     | (nil)                   | 8768                    | 从 0 到 8768 |
+| **lag**          | 0                       | 5127                    | 落后 5127    |
+
+## 解析
+数据的确说明了压测期间,后台消费者是跟不上消息的产生速度的
+```当前链路
+点赞请求:  JWT -> Redis -> XADD -> 返回
+                            |
+                      异 步  |
+                            |
+后台消费者:  XREADGROUP -> create_notification -> DB commit
+```
+**在前期利用`auto_bench.sh`中曾出现过:rps随runs增大而减小,就是因为当时没有`sleep 30`,积压太多**
+
+>经验证:积压消息在一段时间后消失.
+
+## 现测试 Stream消费者是否会和api抢资源
+### 实验A,保持Stream消费者开启
+run `MODE=toggle ./scripts/bench_wrk.sh -t4 -c300 -d35s --latency -s scripts/bench_like.lua http://127.0.0.1:8858/articles/1111/like`  
+
+### 对比表 1：like:events
+| 字段              | 压测前            | 压测后            |sleep 30   | sleep 30
+| ---------------- | ---------------- | ---------------- | --------| --------|
+| group name       |like-db-writers| like-db-writers|like-db-writers |like-db-writers |
+| consumers        | 4                | 8                |  8      |    8    |
+| **pending**      | 0                | 1987             |711      |    0    |
+| last-delivered-id| 0-0         | 1789365080637-0  |1789365080637-0|1789365080637-0|
+| entries-read     | (nil)            | 40944            |40944|  40944  |
+| **lag**          | 0                | 0                |0|  0  |
+### 对比表 2：like:notification:events
+| 字段              | 压测前            | 压测后            |sleep 30 |
+| ---------------- | ---------------- | ---------------- | ---------------- |
+| group name       | notification...  | notification...  |notification...  |
+| consumers        | 4                | 8                |  8  |
+| **pending**      | 0                | 196              |  0  |
+| last-delivered-id| 0-0              | 1789365051528-3  | 1789365080655-0  |
+| entries-read     | (nil)            | 6962             |  20472  |
+| **lag**          | 0                | 13510            |  0  |
+```
+Running 35s test @ http://127.0.0.1:8858/articles/1111/like
+  4 threads and 300 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   160.18ms   51.45ms 550.16ms   68.82%
+    Req/Sec   469.74    133.64     1.88k    76.33%
+  Latency Distribution
+     50%  155.42ms
+     75%  192.76ms
+     90%  226.43ms
+     99%  297.16ms
+  66847 requests in 35.08s, 13.45MB read
+Requests/sec:   1905.72
+Transfer/sec:    392.61KB
+```
+### 实验B,关闭消费者
+`.env.chench` 中 `LIKE_STREAM_IN_PROCESS `改为 `false`  
+
+run `MODE=toggle ./scripts/bench_wrk.sh -t4 -c300 -d35s --latency -s scripts/bench_like.lua http://127.0.0.1:8858/articles/1111/like`  
+
+```
+Running 35s test @ http://127.0.0.1:8858/articles/1111/like
+  4 threads and 300 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   136.23ms   51.74ms   1.11s    79.87%
+    Req/Sec   558.56    120.43     1.14k    70.08%
+  Latency Distribution
+     50%  128.45ms
+     75%  159.05ms
+     90%  190.93ms
+     99%  284.90ms
+  79414 requests in 35.04s, 15.98MB read
+Requests/sec:   2266.35
+Transfer/sec:    466.91KB
+```
+不过压测前后均无数据:
+(HolocronBlog) j0hnny@the-only-skywalker:/Alpha/College_new/HolocronBlog$ redis-cli XINFO GROUPS like:notification:events
+(error) ERR no such key
+(HolocronBlog) j0hnny@the-only-skywalker:/Alpha/College_new/HolocronBlog$ redis-cli XINFO GROUPS like:events
+(error) ERR no such key
+(HolocronBlog) j0hnny@the-only-skywalker:/Alpha/College_new/HolocronBlog$ redis-cli XINFO GROUPS like:events
+(empty array)
+(HolocronBlog) j0hnny@the-only-skywalker:/Alpha/College_new/HolocronBlog$ redis-cli XINFO GROUPS like:notification:events
+(empty array)
+(HolocronBlog) j0hnny@the-only-skywalker:/Alpha/College_new/HolocronBlog$ 
