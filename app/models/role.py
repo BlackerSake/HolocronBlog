@@ -1,7 +1,6 @@
 
-from datetime import datetime
-from app.core.config import settings
-from sqlalchemy import Column, ForeignKey, Integer, String, Table
+from datetime import datetime, timezone
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Table
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.permission import Permission
 from app.core.database import Base
@@ -25,12 +24,12 @@ class Role(Base):
     description: Mapped[str] = mapped_column(String(255))
     is_system: Mapped[bool] = mapped_column(default=False)
     create_at: Mapped[datetime] = mapped_column(
-        default=lambda: datetime.now(settings.tz),
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
     )
     permissions: Mapped[list["Permission"]] = relationship(
         "Permission",
         secondary="role_permission",
         lazy="selectin",
     )
-
 

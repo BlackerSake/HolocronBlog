@@ -3,11 +3,10 @@
 
 
 
-from datetime import datetime
-from sqlalchemy import String
+from datetime import datetime, timezone
+from sqlalchemy import DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.config import settings
 from app.core.database import Base
 
 
@@ -19,5 +18,6 @@ class Permission(Base):
 
     description: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(
-        default=lambda: datetime.now(settings.tz),
-    ) 
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )

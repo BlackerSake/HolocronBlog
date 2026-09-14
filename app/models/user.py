@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from sqlalchemy import ForeignKey, String, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from app.core.config import settings
+from sqlalchemy import DateTime
 from app.core.database import Base
 from app.models.role import Role
 
@@ -26,7 +26,8 @@ class User(Base):
     bio: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
-        default=lambda: datetime.now(settings.tz),
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
     )
 
     articles = relationship("Article", back_populates="author")

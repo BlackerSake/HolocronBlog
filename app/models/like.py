@@ -2,12 +2,11 @@
 
 
 
-from datetime import datetime
+from datetime import datetime, timezone
 
-from sqlalchemy import ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.config import settings
 from app.core.database import Base
 from app.models.user import User
 
@@ -33,7 +32,8 @@ class Likes(Base):
     target_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
 
     create_at: Mapped[datetime] = mapped_column(
-        default=lambda: datetime.now(settings.tz)
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc)
     )
 
     user: Mapped["User"] = relationship("User", lazy="joined")

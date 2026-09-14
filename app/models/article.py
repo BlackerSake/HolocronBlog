@@ -4,7 +4,6 @@ from sqlalchemy import (
     Text, Boolean, DateTime, Table
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from app.core.config import settings
 from app.core.database import Base
 
 """创建文章表"""
@@ -44,12 +43,12 @@ class Article(Base):
     # 时间
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(settings.tz),
+        default=lambda: datetime.now(timezone.utc),
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(settings.tz),
-        onupdate=lambda: datetime.now(settings.tz),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
     # 浏览量字段
     views: Mapped[int] = mapped_column(Integer, server_default="0")

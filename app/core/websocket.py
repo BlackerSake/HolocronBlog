@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 from urllib.parse import urlparse
 
@@ -94,7 +94,7 @@ class ConnectionManager:
         message = {
             "type": "system",
             "message": content,
-            "time": datetime.now(settings.tz).isoformat(),
+            "time": datetime.now(timezone.utc).isoformat(),
         }
         for uid in list(self.active_connections.keys()):
             await self.send_personal_message(uid, json.dumps(message, ensure_ascii=False))

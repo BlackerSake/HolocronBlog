@@ -3,7 +3,6 @@
 from datetime import datetime, timezone
 from sqlalchemy import Text, ForeignKey, Boolean, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from app.core.config import settings
 from app.core.database import Base
 from app.models.user import User
 
@@ -23,7 +22,7 @@ class Comment(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(settings.tz),
+        default=lambda: datetime.now(timezone.utc),
     )
 
     # 发布后不可编辑
@@ -31,4 +30,3 @@ class Comment(Base):
     author: Mapped["User"] = relationship()
 
     like_count: Mapped[int] = mapped_column(default=0)
-

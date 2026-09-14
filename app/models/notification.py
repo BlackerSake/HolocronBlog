@@ -2,7 +2,6 @@
 from datetime import datetime, timezone
 from sqlalchemy import String, Text, ForeignKey, Boolean, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from app.core.config import settings
 from app.core.database import Base
 from app.models.user import User
 
@@ -24,8 +23,7 @@ class Notification(Base):
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(settings.tz),
+        default=lambda: datetime.now(timezone.utc),
     )
 
     initiator: Mapped["User"] = relationship("User", foreign_keys=[initiator_id], lazy="joined")
-

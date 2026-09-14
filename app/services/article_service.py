@@ -5,7 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 import mistune
 
-from app.core.config import settings
 from app.models.article import Article
 from app.models.comment import Comment
 from app.models.tag import Tag
@@ -88,7 +87,7 @@ async def resolve_slug_conflict(db: AsyncSession, slug: str, user_id: int) -> st
     existing = await db.execute(
         select(Article).where(Article.slug == slug))
     if existing.scalar_one_or_none():
-        slug = f"{slug}-{user_id}-{int(datetime.now(settings.tz).timestamp() * 1000)}"
+        slug = f"{slug}-{user_id}-{int(datetime.now(timezone.utc).timestamp() * 1000)}"
     return slug
 
 
@@ -266,8 +265,7 @@ async def update_article(
     if article_in.tags_id is not None:
         await set_article_tags(db, article, article_in.tags_id)
 
-    article.updated_at = datetime.now(settings.tz)
+    article.updated_at = datetime.now(timezone.utc)
     await db.commit()
     return article
-
 

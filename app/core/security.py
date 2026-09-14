@@ -66,10 +66,10 @@ def create_access_token(
     """
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.now(settings.tz) + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
 
     else:
-        expire = datetime.now(settings.tz) + timedelta(
+        expire = datetime.now(timezone.utc) + timedelta(
             minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
             )
     to_encode.update({"exp": expire})
@@ -91,7 +91,7 @@ def create_refresh_token(username: str) -> str:
     Returns:
         str: 编码后的刷新令牌字符串。
     """
-    expire = datetime.now(settings.tz) + timedelta(
+    expire = datetime.now(timezone.utc) + timedelta(
         days=settings.REFRESH_TOKEN_EXPIRE_DAYS
     )
     return jwt.encode(
@@ -99,5 +99,4 @@ def create_refresh_token(username: str) -> str:
         settings.SECRET_KEY,
         algorithm="HS256",
     )
-
 
