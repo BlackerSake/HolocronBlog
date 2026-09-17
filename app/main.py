@@ -26,13 +26,19 @@ from app.core.cache_consistency import start_cache_consistency_task, stop_cache_
 log_dir = os.path.join(os.path.dirname(__file__), "..", "logs")
 os.makedirs(log_dir, exist_ok=True)
 
+import os, sys, logging
+
+handlers = [logging.StreamHandler(sys.stdout)]
+
+# 只在本地（非 Vercel）写文件
+if not os.getenv("VERCEL"):
+    os.makedirs("logs", exist_ok=True)
+    handlers.append(logging.FileHandler("logs/app.log", encoding="utf-8"))
+
 logging.basicConfig(
-    level=settings.LOG_LEVEL,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler(os.path.join(log_dir, "app.log")),
-        logging.StreamHandler()
-    ]
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=handlers,
 )
 logging.getLogger().setLevel(settings.LOG_LEVEL)
 @asynccontextmanager
