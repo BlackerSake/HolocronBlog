@@ -5,7 +5,7 @@ from app.core.database import engine, get_db
 from contextlib import asynccontextmanager
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-import os, logging
+import os, logging, sys
 from app.api.v1.endpoints import auth
 from app.routers import categories, comments, tags
 from app.routers import articles
@@ -23,10 +23,7 @@ from app.core.notification_stream import start_notification_stream_task, stop_no
 from app.services.like_service import start_like_warm_listener, stop_like_warm_listener
 from app.core.cache_rebuild import start_cache_rebuild_task, stop_cache_rebuild_task
 from app.core.cache_consistency import start_cache_consistency_task, stop_cache_consistency_task
-log_dir = os.path.join(os.path.dirname(__file__), "..", "logs")
-os.makedirs(log_dir, exist_ok=True)
 
-import os, sys, logging
 
 handlers = [logging.StreamHandler(sys.stdout)]
 
