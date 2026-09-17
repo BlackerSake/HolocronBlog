@@ -8,13 +8,19 @@ import asyncio
 import logging
 logger = logging.getLogger(__name__)
 
-redis_client = redis.Redis(
-    host=settings.REDIS_HOST, #default localhost
-    port=settings.REDIS_PORT, #default 6379
-    db=0,
-    decode_responses=True,
-    socket_timeout=None,
-)
+if settings.UPSTASH_REDIS_REST_URL:
+    redis_client = redis.from_url(
+        settings.UPSTASH_REDIS_REST_URL,
+        decode_responses= True
+    )
+else:
+    redis_client = redis.Redis(
+        host=settings.REDIS_HOST, #default localhost
+        port=settings.REDIS_PORT, #default 6379
+        db=0,
+        decode_responses=True,
+        socket_timeout=None,
+    )
 
 # 后台任务句柄，用于关闭
 _background_task: asyncio.Task | None = None
