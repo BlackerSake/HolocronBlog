@@ -28,7 +28,7 @@ from app.core.cache_consistency import start_cache_consistency_task, stop_cache_
 handlers = [logging.StreamHandler(sys.stdout)]
 
 # 只在本地（非 Vercel）写文件
-if not os.getenv("VERCEL"):
+if not os.getenv("VERCEL") or not os.getenv("RENDER"):
     os.makedirs("logs", exist_ok=True)
     handlers.append(logging.FileHandler("logs/app.log", encoding="utf-8"))
 

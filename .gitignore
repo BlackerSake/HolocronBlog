@@ -28,7 +28,7 @@ ENV/
 .env
 .env.local
 .env.*.local
-
+.env.*
 # Logs
 *.log
 logs/
