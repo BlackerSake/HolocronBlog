@@ -9,6 +9,11 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      SECRET_KEY: ${{ secrets.SECRET_KEY }}
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/test
 
     steps:
       - uses: actions/checkout@v4
