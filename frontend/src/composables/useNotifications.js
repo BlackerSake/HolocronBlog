@@ -86,8 +86,13 @@ export function useNotifications() {
       window.location.href = '/login'
       return
     }
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const connection = new WebSocket(`${protocol}//${window.location.host}/notifications/ws?token=${encodeURIComponent(token)}`)
+    const wsBaseUrl =
+      import.meta.env.VITE_WS_BASE_URL ||
+      `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`
+
+    const connection = new WebSocket(
+      `${wsBaseUrl}/notifications/ws?token=${encodeURIComponent(token)}`
+    )
     socket = connection
     connection.onopen = () => fetchUnreadCount().catch(() => {})
     connection.onmessage = event => {
