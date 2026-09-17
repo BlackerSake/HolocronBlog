@@ -8,9 +8,9 @@ import asyncio
 import logging
 logger = logging.getLogger(__name__)
 
-if settings.UPSTASH_REDIS_REST_URL:
+if settings.REDIS_URL:
     redis_client = redis.from_url(
-        settings.UPSTASH_REDIS_REST_URL,
+        settings.REDIS_URL,
         decode_responses= True
     )
 else:

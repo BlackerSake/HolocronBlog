@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     APP_VERSION: str = "0.5.0"
 
     DATABASE_URL: str = "postgresql+asyncpg:///./holocron.db"
-    UPSTASH_REDIS_REST_URL: str = ""
+    REDIS_URL: str = ""
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
     REDIS_SYNC_INTERVAL: int = 60 * 5
