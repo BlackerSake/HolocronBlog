@@ -47,3 +47,5 @@ frontend/dist/
 # Build artifacts
 dist/
 build/
+
+.coverage
